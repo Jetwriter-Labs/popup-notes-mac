@@ -32,6 +32,8 @@ struct NoteTextEditor: NSViewRepresentable {
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
+        scrollView.scrollerStyle = .overlay      // thin, floats over content
+        scrollView.autohidesScrollers = true     // only appears while scrolling
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         // SwiftUI already lays the editor out below the toolbar; without this the
