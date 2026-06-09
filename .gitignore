@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Xcode — build output & user-specific data
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Swift Package Manager
+.build/
+
+# Claude Code — personal local settings (not shared)
+.claude/settings.local.json
