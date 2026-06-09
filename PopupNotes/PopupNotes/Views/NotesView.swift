@@ -40,6 +40,9 @@ struct NotesView: View {
         .onExitCommand {
             if searchText.isEmpty { onEscape() } else { searchText = "" }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .popupNotesPanelDidHide)) { _ in
+            searchText = ""
+        }
     }
 
     private func restoreSelection() {

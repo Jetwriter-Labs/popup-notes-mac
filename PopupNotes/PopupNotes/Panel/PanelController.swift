@@ -32,6 +32,7 @@ final class PanelController {
         removeClickMonitor()
         panel.orderOut(nil)
         previousApp?.activate()
+        NotificationCenter.default.post(name: .popupNotesPanelDidHide, object: nil)
     }
 
     // MARK: - Build
@@ -76,4 +77,10 @@ final class PanelController {
     private func removeClickMonitor() {
         if let clickMonitor { NSEvent.removeMonitor(clickMonitor); self.clickMonitor = nil }
     }
+}
+
+/// Posted when the notes panel is dismissed (any path: Esc, click-outside, hotkey
+/// toggle), so the SwiftUI layer can reset transient UI state like the search query.
+extension Notification.Name {
+    static let popupNotesPanelDidHide = Notification.Name("popupNotesPanelDidHide")
 }
