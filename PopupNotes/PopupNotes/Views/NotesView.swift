@@ -12,7 +12,6 @@ struct NotesView: View {
     @Query(sort: \Note.modified, order: .reverse) private var notes: [Note]
     @State private var selection: UUID?
     @State private var searchText = ""
-    @State private var searchPresented = false
     @AppStorage("lastSelectedNoteID") private var lastSelectedRaw = ""
 
     var body: some View {
@@ -20,7 +19,6 @@ struct NotesView: View {
             NotesListView(notes: NoteSearch.filter(notes, matching: searchText),
                           selection: $selection,
                           searchText: $searchText,
-                          searchPresented: $searchPresented,
                           onNew: newNote,
                           onDelete: delete)
                 .navigationSplitViewColumnWidth(min: 130, ideal: 200)
@@ -33,12 +31,6 @@ struct NotesView: View {
                 ContentUnavailableView("No Note Selected", systemImage: "note.text",
                                        description: Text("Select a note or create one."))
             }
-        }
-        .background {
-            Button("Find") { searchPresented = true }
-                .keyboardShortcut("f", modifiers: .command)
-                .opacity(0)
-                .accessibilityHidden(true)
         }
         .frame(minWidth: 360, minHeight: 220)
         .onAppear(perform: restoreSelection)

@@ -8,11 +8,11 @@ struct NotesListView: View {
     let notes: [Note]
     @Binding var selection: UUID?
     @Binding var searchText: String
-    @Binding var searchPresented: Bool
     var onNew: () -> Void
     var onDelete: (Note) -> Void
 
     @State private var pendingDelete: Note?
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         List(selection: $selection) {
@@ -29,12 +29,18 @@ struct NotesListView: View {
                 }
             }
         }
-        .searchable(text: $searchText, isPresented: $searchPresented,
-                    placement: .sidebar, prompt: "Search Notes")
+        .searchable(text: $searchText, placement: .sidebar, prompt: "Search Notes")
+        .searchFocused($searchFocused)
         .overlay {
-            if searchPresented && !searchText.isEmpty && notes.isEmpty {
+            if !searchText.isEmpty && notes.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             }
+        }
+        .background {
+            Button("Find") { searchFocused = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
         .toolbar {
             ToolbarItem {
