@@ -16,7 +16,7 @@ final class FloatingPanel: NSPanel {
         hasShadow = true
         isMovableByWindowBackground = false // fixed position per spec
         hidesOnDeactivate = false
-        animationBehavior = .utilityWindow
+        animationBehavior = .none           // instant show/hide — snappy, no fade
     }
 
     override var canBecomeKey: Bool { true }   // required for text entry
