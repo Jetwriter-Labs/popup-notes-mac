@@ -33,11 +33,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showScratchpad() { panel.show() }
 
     /// Reveals the scratchpad file in Finder (creating it first if needed).
-    func openNotesFile() {
-        let url = store.fileURL
-        if !FileManager.default.fileExists(atPath: url.path) {
-            store.flush() // create the file so Finder has something to select
-        }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
+    func openNotesFile() { NotesFile.revealInFinder(store) }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import PopupNotesCore
 
 /// The chromeless editor: a TextEditor bound to NoteStore, a placeholder when
@@ -31,7 +32,31 @@ struct ScratchpadView: View {
         .frame(width: 480, height: 320)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(alignment: .topTrailing) { optionsMenu.padding(6) }
         .onAppear { editorFocused = true }
         .onExitCommand { onDismiss() }          // Esc
+    }
+
+    /// Discreet ⋯ menu so the app's options are reachable from the popup itself
+    /// (not just the menu-bar item, which can be hidden behind the notch).
+    private var optionsMenu: some View {
+        Menu {
+            Button("Open Notes File") { NotesFile.revealInFinder(store) }
+            Toggle("Launch at Login", isOn: Binding(
+                get: { LaunchAtLogin.isEnabled },
+                set: { LaunchAtLogin.isEnabled = $0 }
+            ))
+            Divider()
+            Button("Quit Popup Notes") { NSApplication.shared.terminate(nil) }
+        } label: {
+            Image(systemName: "ellipsis.circle.fill")
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Options")
     }
 }
