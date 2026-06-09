@@ -23,6 +23,8 @@ struct NotesView: View {
                           onDelete: delete)
                 .navigationSplitViewColumnWidth(min: 130, ideal: 200)
         } detail: {
+            // Resolve from the *unfiltered* `notes` on purpose: the selected note stays
+            // open in the editor even when the active search filter hides it from the list.
             if let id = selection, let note = notes.first(where: { $0.id == id }) {
                 NoteDetailView(note: note).id(id)
             } else {
