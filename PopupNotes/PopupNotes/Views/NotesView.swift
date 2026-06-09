@@ -11,11 +11,16 @@ struct NotesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Note.modified, order: .reverse) private var notes: [Note]
     @State private var selection: UUID?
+    @State private var searchText = ""
     @AppStorage("lastSelectedNoteID") private var lastSelectedRaw = ""
 
     var body: some View {
         NavigationSplitView {
-            NotesListView(notes: notes, selection: $selection, onNew: newNote, onDelete: delete)
+            NotesListView(notes: NoteSearch.filter(notes, matching: searchText),
+                          selection: $selection,
+                          searchText: $searchText,
+                          onNew: newNote,
+                          onDelete: delete)
                 .navigationSplitViewColumnWidth(min: 130, ideal: 200)
         } detail: {
             if let id = selection, let note = notes.first(where: { $0.id == id }) {
@@ -30,7 +35,9 @@ struct NotesView: View {
         .onChange(of: selection) { _, newValue in
             lastSelectedRaw = newValue?.uuidString ?? ""
         }
-        .onExitCommand { onEscape() }
+        .onExitCommand {
+            if searchText.isEmpty { onEscape() } else { searchText = "" }
+        }
     }
 
     private func restoreSelection() {
@@ -43,6 +50,7 @@ struct NotesView: View {
     }
 
     private func newNote() {
+        searchText = ""
         let note = Note()
         context.insert(note)
         selection = note.id

@@ -7,6 +7,7 @@ import PopupNotesCore
 struct NotesListView: View {
     let notes: [Note]
     @Binding var selection: UUID?
+    @Binding var searchText: String
     var onNew: () -> Void
     var onDelete: (Note) -> Void
 
@@ -25,6 +26,12 @@ struct NotesListView: View {
                 .contextMenu {
                     Button("Delete", role: .destructive) { pendingDelete = note }
                 }
+            }
+        }
+        .searchable(text: $searchText, placement: .sidebar, prompt: "Search Notes")
+        .overlay {
+            if !searchText.isEmpty && notes.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             }
         }
         .toolbar {
