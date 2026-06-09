@@ -31,9 +31,10 @@ struct NoteTextEditor: NSViewRepresentable {
 
         let scrollView = NSScrollView()
         scrollView.documentView = textView
+        scrollView.scrollerStyle = .overlay      // prefer the thin floating style
         scrollView.hasVerticalScroller = true
-        scrollView.scrollerStyle = .overlay      // thin, floats over content
         scrollView.autohidesScrollers = true     // only appears while scrolling
+        scrollView.verticalScroller = MinimalScroller() // stay thin even if the system pref is "Always"
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         // SwiftUI already lays the editor out below the toolbar; without this the
@@ -69,5 +70,21 @@ struct NoteTextEditor: NSViewRepresentable {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
         }
+    }
+}
+
+/// A deliberately thin scroller: a narrow track and no slot background, so the
+/// editor shows only a subtle knob regardless of the system "Show scroll bars"
+/// setting (which would otherwise force the wide legacy scroller).
+final class MinimalScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override class func scrollerWidth(for controlSize: NSControl.ControlSize,
+                                      scrollerStyle: NSScroller.Style) -> CGFloat {
+        8
+    }
+
+    override func drawKnobSlot(in slotRect: NSRect, highlight flag: Bool) {
+        // Intentionally empty — no track background.
     }
 }
