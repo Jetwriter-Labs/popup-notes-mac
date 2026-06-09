@@ -6,17 +6,17 @@ struct PopupNotesApp: App {
 
     var body: some Scene {
         MenuBarExtra("Popup Notes", systemImage: "note.text") {
-            Button("Show Scratchpad") { appDelegate.showScratchpad() }
+            Button("Show Notes") { appDelegate.showNotes() }
                 .keyboardShortcut("n", modifiers: [.control, .command])
-            Button("Open Notes File") { appDelegate.openNotesFile() }
             Divider()
-            Toggle("Launch at Login", isOn: Binding(
-                get: { LaunchAtLogin.isEnabled },
-                set: { LaunchAtLogin.isEnabled = $0 }
-            ))
+            SettingsLink { Text("Settings…") }
             Divider()
             Button("Quit Popup Notes") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
+        }
+
+        Settings {
+            SettingsView(container: appDelegate.container)
         }
     }
 }

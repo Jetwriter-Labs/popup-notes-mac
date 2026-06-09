@@ -18,4 +18,12 @@ enum LaunchAtLogin {
             }
         }
     }
+
+    /// Enables launch-at-login once, on first run only. Subsequent user toggles win.
+    static func applyFirstRunDefaultIfNeeded() {
+        let key = "didApplyFirstRunDefaults"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        isEnabled = true
+    }
 }
