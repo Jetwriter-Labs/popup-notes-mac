@@ -63,4 +63,10 @@ import Foundation
         #expect(isDir.boolValue)             // still the original directory, untouched
         try? FileManager.default.removeItem(at: file.url)
     }
+
+    @Test func exposesFileURL() {
+        let file = freshFile()
+        let store = NoteStore(file: file, autosave: ManualDebouncer())
+        #expect(store.fileURL == file.url)
+    }
 }

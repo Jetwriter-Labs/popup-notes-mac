@@ -15,6 +15,9 @@ public final class NoteStore {
     /// overwrite it until the user actually edits (takes ownership).
     @ObservationIgnored private var safeToWrite = true
 
+    /// Location of the backing scratchpad file (used by "Open Notes File").
+    public var fileURL: URL { file.url }
+
     public init(file: NoteFile, autosave: any Debouncing) {
         self.file = file
         self.autosave = autosave
