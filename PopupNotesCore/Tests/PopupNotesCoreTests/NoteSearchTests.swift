@@ -23,6 +23,11 @@ import Foundation
         #expect(result.count == 1)
         #expect(result.first?.id == a.id)
     }
+    @Test func filterMatchesTitleLine() {
+        let note = Note(text: "Groceries\nmilk")
+        let result = NoteSearch.filter([note], matching: "Groc")
+        #expect(result.count == 1)
+    }
     @Test func filterPreservesOrder() {
         let a = Note(text: "alpha note")
         let b = Note(text: "beta note")
