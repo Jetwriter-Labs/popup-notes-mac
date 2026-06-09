@@ -8,6 +8,7 @@ struct NotesListView: View {
     let notes: [Note]
     @Binding var selection: UUID?
     @Binding var searchText: String
+    @Binding var searchPresented: Bool
     var onNew: () -> Void
     var onDelete: (Note) -> Void
 
@@ -28,9 +29,10 @@ struct NotesListView: View {
                 }
             }
         }
-        .searchable(text: $searchText, placement: .sidebar, prompt: "Search Notes")
+        .searchable(text: $searchText, isPresented: $searchPresented,
+                    placement: .sidebar, prompt: "Search Notes")
         .overlay {
-            if !searchText.isEmpty && notes.isEmpty {
+            if searchPresented && !searchText.isEmpty && notes.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             }
         }
