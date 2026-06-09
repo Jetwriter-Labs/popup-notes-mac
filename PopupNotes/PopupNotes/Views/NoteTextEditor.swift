@@ -34,6 +34,11 @@ struct NoteTextEditor: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
+        // SwiftUI already lays the editor out below the toolbar; without this the
+        // scroll view ALSO insets for the title bar (.fullSizeContentView),
+        // double-counting the toolbar height as a large top gap.
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets()
 
         // Caret at end, focused, once the view is in a window.
         let end = NSRange(location: (text as NSString).length, length: 0)
