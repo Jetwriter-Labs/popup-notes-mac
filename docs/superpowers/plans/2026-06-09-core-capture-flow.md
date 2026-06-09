@@ -10,6 +10,14 @@
 
 ---
 
+## Progress
+
+- **2026-06-09 — Phase 0–1 COMPLETE.** `PopupNotesCore` built and green (22 tests) on branch `feat/core-capture-flow`. Tasks 1–5 done: scaffold + CLT-aware test runner, `HotKeyCombo`, `NoteFile`, `Debouncing`, `NoteStore`.
+- **Paused at the Phase 1 milestone**, awaiting the Xcode 26.5 install.
+- **Resume at Task 6** (create the Xcode app project) once `xcodebuild -version` works. Run the core tests anytime with `./scripts/test-core.sh`.
+
+---
+
 ## ⚠️ Environment facts (verified 2026-06-09 by running on this machine)
 
 - **No Xcode installed.** `xcode-select -p` → `/Library/Developer/CommandLineTools`. Swift **6.2.4**; default SDK **MacOSX26.2.sdk**; host macOS **15.7.7**. Disk **~34 GB free** (Xcode needs ~40 GB+ — free space first).
