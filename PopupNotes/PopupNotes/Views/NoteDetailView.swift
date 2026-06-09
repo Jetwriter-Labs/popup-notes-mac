@@ -11,5 +11,8 @@ struct NoteDetailView: View {
             get: { note.text },
             set: { note.text = $0; note.modified = .now }
         ))
+        // The detail column's 52pt top toolbar strip is empty (controls live in
+        // the sidebar), so let the editor fill it and start the text at the top.
+        .ignoresSafeArea(.container, edges: .top)
     }
 }
