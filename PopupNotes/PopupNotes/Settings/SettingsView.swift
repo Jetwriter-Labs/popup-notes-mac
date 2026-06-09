@@ -11,22 +11,26 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Toggle("Launch at Login", isOn: Binding(
-                get: { LaunchAtLogin.isEnabled },
-                set: { LaunchAtLogin.isEnabled = $0 }
-            ))
+            Section {
+                Toggle("Launch at Login", isOn: Binding(
+                    get: { LaunchAtLogin.isEnabled },
+                    set: { LaunchAtLogin.isEnabled = $0 }
+                ))
+            }
             Section("Data") {
-                HStack {
-                    Button("Export Notes…") { exportNotes() }
-                    Button("Import Notes…") { importNotes() }
+                LabeledContent("Export all notes") {
+                    Button("Export…") { exportNotes() }
+                }
+                LabeledContent("Import notes") {
+                    Button("Import…") { importNotes() }
                 }
                 if let status {
-                    Text(status).font(.caption).foregroundStyle(.secondary)
+                    Text(status).font(.callout).foregroundStyle(.secondary)
                 }
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380)
+        .frame(width: 420, height: 240)
     }
 
     private func exportNotes() {

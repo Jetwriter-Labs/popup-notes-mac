@@ -38,6 +38,7 @@ final class PanelController {
 
     private func makePanel() -> FloatingPanel {
         let panel = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 720, height: 460))
+        panel.contentMinSize = NSSize(width: 360, height: 220)   // allow shrinking to a compact size
         panel.onCancel = { [weak self] in self?.hide() }
         panel.setHosted(NotesView(onEscape: { [weak self] in self?.hide() }), container: container)
         panel.setFrameAutosaveName("PopupNotesPanel")
@@ -59,10 +60,16 @@ final class PanelController {
     // MARK: - Click-outside dismissal
 
     private func installClickMonitor() {
+        // Dismiss only when the click is genuinely OUTSIDE the panel. Without this
+        // guard, dragging or resizing the panel (whose title-bar mouse events the
+        // global monitor also observes) would hide it mid-interaction.
         clickMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in
-            Task { @MainActor in self?.hide() }
+            Task { @MainActor in
+                guard let self, let panel = self.panel else { return }
+                if !panel.frame.contains(NSEvent.mouseLocation) { self.hide() }
+            }
         }
     }
 

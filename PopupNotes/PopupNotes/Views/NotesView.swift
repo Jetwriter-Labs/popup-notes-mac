@@ -16,7 +16,7 @@ struct NotesView: View {
     var body: some View {
         NavigationSplitView {
             NotesListView(notes: notes, selection: $selection, onNew: newNote, onDelete: delete)
-                .navigationSplitViewColumnWidth(min: 170, ideal: 230)
+                .navigationSplitViewColumnWidth(min: 130, ideal: 200)
         } detail: {
             if let id = selection, let note = notes.first(where: { $0.id == id }) {
                 NoteDetailView(note: note).id(id)
@@ -25,7 +25,7 @@ struct NotesView: View {
                                        description: Text("Select a note or create one."))
             }
         }
-        .frame(minWidth: 560, minHeight: 360)
+        .frame(minWidth: 360, minHeight: 220)
         .onAppear(perform: restoreSelection)
         .onChange(of: selection) { _, newValue in
             lastSelectedRaw = newValue?.uuidString ?? ""
