@@ -201,5 +201,10 @@ The single-note `NoteStore` / `NoteFile` / `Debouncing` / `ScratchpadView` are
   misbehaves, drive the list from `NotesRepository` fetches instead.
 - **Current SwiftData APIs** — verify names/signatures and macOS 15 availability
   against current Apple docs before relying on memory.
-- **CLAUDE.md** still describes the single-note model — update it during
-  implementation to reflect the SwiftData multiple-notes architecture.
+- **CLAUDE.md** described the single-note model — updated to the SwiftData
+  multiple-notes architecture during implementation. ✓
+- **Sandbox (decided during implementation):** the Xcode app template enables
+  App Sandbox; we **kept it** (supersedes the original specs' non-sandboxed
+  plan). Data lives in the app container
+  (`~/Library/Containers/com.gorvgoyl.PopupNotes/…/PopupNotes/Notes.store`),
+  not a user-visible folder; JSON export/import is the portability path.

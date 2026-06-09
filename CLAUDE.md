@@ -3,9 +3,10 @@
 Guidance for Claude (and humans) working in this repository.
 
 A native macOS background utility: press a global keyboard shortcut anywhere
-to overlay a translucent popup scratchpad over the current app, jot a quick
-note, and dismiss it. Single persistent document. Native, fast, zero
-third-party dependencies.
+to overlay a popup over the current app, jot notes, and dismiss it. A resizable
+panel shows a sidebar of notes (each titled by its first line) beside the
+selected note's editor, backed by a local **SwiftData** database. Native, fast,
+zero third-party dependencies.
 
 ---
 
@@ -44,13 +45,18 @@ up first.
 
 - **Trigger:** a fixed global shortcut (default **⌃⌘N**) registered via Carbon
   `RegisterEventHotKey`.
-- **UI:** a non-activating, floating `NSPanel` hosting a SwiftUI `TextEditor`,
-  overlaid over the current app without stealing it away.
-- **Model:** one persistent scratchpad — a single plain-text file. No
-  database, no notes list.
+- **UI:** a non-activating, floating, **resizable** `NSPanel` hosting a SwiftUI
+  `NavigationSplitView` — a sidebar list of notes beside the selected note's
+  `TextEditor` — overlaid over the current app without stealing it away.
+- **Model:** **multiple notes** in a local **SwiftData** database (SQLite under
+  the hood). Each note's **title is its first line**. A **Settings** window
+  offers launch-at-login and JSON export/import.
 - **Shell:** a menu-bar accessory app (no Dock icon).
 
-Full design rationale and the decisions behind this scope:
+Current design (multiple notes + SwiftData + Settings — **supersedes the
+single-note model**):
+[`docs/superpowers/specs/2026-06-09-multiple-notes-swiftdata-design.md`](docs/superpowers/specs/2026-06-09-multiple-notes-swiftdata-design.md).
+Original architecture & scope rationale:
 [`docs/superpowers/specs/2026-06-09-popup-notes-architecture-design.md`](docs/superpowers/specs/2026-06-09-popup-notes-architecture-design.md).
 
 ## Tech stack (as of June 2026 — **re-verify, see warning above**)
@@ -64,8 +70,11 @@ Full design rationale and the decisions behind this scope:
   (`LSUIElement = true`).
 - **Carbon `RegisterEventHotKey`** for the global hotkey (the only native
   option — confirmed still true in 2026).
-- **Foundation** single-file persistence with atomic writes.
-- **`SMAppService.mainApp`** for launch-at-login.
+- **SwiftData** (`@Model`, SQLite-backed) for the notes database — first-party,
+  so still zero third-party deps. Pure logic + the SwiftData repository live in
+  the **`PopupNotesCore`** SwiftPM package; run its tests with
+  `./scripts/test-core.sh` (works on Command Line Tools or full Xcode).
+- **`SMAppService.mainApp`** for launch-at-login (on by default, first run only).
 - **Swift Testing** (`import Testing`) for tests.
 - **Xcode 26.5** to build (Command Line Tools alone are not enough for a GUI
   app bundle).
@@ -75,13 +84,15 @@ Full design rationale and the decisions behind this scope:
 
 | Unit | Responsibility |
 |---|---|
-| `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra`; bridges to `AppDelegate`. |
-| `AppDelegate` | Sets `.accessory` policy; wires hotkey → panel; flushes save on quit. |
+| `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra` + the `Settings` scene; bridges to `AppDelegate`. |
+| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-run launch-at-login default; wires hotkey → panel; saves on quit. |
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
-| `PanelController` | Owns panel lifecycle: build, host SwiftUI, position, show/hide, click-outside monitor, Esc. |
-| `FloatingPanel` | `NSPanel` subclass: non-activating, floating, material, becomes key for typing, all-Spaces + full-screen-aux. |
-| `ScratchpadView` | SwiftUI `TextEditor` bound to the note; minimal chrome. |
-| `NoteStore` | `@Observable`; loads/saves the single text file; debounced autosave + atomic writes. |
+| `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide, click-outside monitor, Esc. |
+| `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |
+| `NotesView` · `NotesListView` · `NoteDetailView` | SwiftUI master-detail: `@Query` sidebar (title + date, new/delete-with-confirm) + the selected note's `TextEditor`. |
+| `SettingsView` | `Settings` scene: launch-at-login toggle + JSON export/import. |
+| `Note` (`@Model`) · `NotesRepository` | SwiftData model (id, text, created, modified; first-line `title`) + CRUD (create/delete/sort/upsert). In `PopupNotesCore`. |
+| `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import. In `PopupNotesCore`. |
 
 ## Conventions & principles
 
@@ -100,8 +111,9 @@ Full design rationale and the decisions behind this scope:
   legacy `ObservableObject`/`@Published`.
 - **Small, single-responsibility files** with clear interfaces (see the
   component map). If a file grows to do several things, split it.
-- **Data safety over cleverness.** Atomic writes; never lose in-memory text on
-  a failed save; never overwrite an unreadable file before the user edits.
+- **Data safety over cleverness.** SwiftData autosaves; also `save()` on panel
+  hide and on quit. Migration never deletes the legacy file. JSON export is the
+  user's backup / portability path.
 - **Verify, then claim.** Run the build/tests and observe real behavior before
   saying something works (see warning at top re: docs).
 
@@ -139,8 +151,9 @@ xcodebuild -scheme PopupNotes -destination 'platform=macOS' test
 Or open `PopupNotes.xcodeproj` in Xcode and Run (⌘R) / Test (⌘U).
 
 Manual smoke test: launch, confirm the menu-bar icon (no Dock icon), press
-**⌃⌘N** from another app, type, press **Esc**; reopen and confirm the text
-persisted; test once over a full-screen app.
+**⌃⌘N**, create a note (**⌘N**) and type a first line (it becomes the sidebar
+title), switch between notes, press **Esc**; reopen and confirm notes persisted;
+open **Settings (⌘,)** and try export/import; test once over a full-screen app.
 
 ## Key gotchas / constraints
 
@@ -155,9 +168,12 @@ persisted; test once over a full-screen app.
 - **Overlay reach:** set `collectionBehavior` to `.canJoinAllSpaces` +
   `.fullScreenAuxiliary` so the panel shows over full-screen apps and on all
   Spaces.
-- **Non-sandboxed** (personal/direct distribution). Notes live at
-  `~/Library/Application Support/PopupNotes/scratchpad.md`. Adding the App
-  Sandbox later changes file locations and entitlements.
+- **Sandboxed** — the Xcode app template enabled App Sandbox and we kept it
+  (this **supersedes the original specs' non-sandboxed plan**). Data lives in
+  the app container, e.g. `~/Library/Containers/com.gorvgoyl.PopupNotes/Data/
+  Library/Application Support/PopupNotes/Notes.store`, **not** a user-visible
+  folder. File-picker export/import works via the sandbox powerbox; SwiftData,
+  the Carbon hotkey, and `SMAppService` all work sandboxed.
 
 ## Official docs to verify against (first-party first)
 
