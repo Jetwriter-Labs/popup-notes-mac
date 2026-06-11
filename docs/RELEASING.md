@@ -44,11 +44,10 @@ The app already meets the technical requirements: App Sandbox on, app category
 set, privacy manifest bundled, export-compliance key declared, and SwiftData /
 the Carbon hotkey / `SMAppService` all work sandboxed.
 
-> **⚠️ Fix before submitting — review guideline 2.4.5(iii):** Mac apps "may not
-> auto-launch … at startup or login without consent." `LaunchAtLogin.
-> applyFirstRunDefaultIfNeeded()` silently enables launch-at-login on first
-> run. For the App Store build, either default it off or ask the user first
-> (e.g. a one-time prompt or onboarding checkbox).
+> **Review guideline 2.4.5(iii) — handled:** Mac apps "may not auto-launch …
+> at startup or login without consent," so `LaunchAtLogin.
+> promptForConsentIfNeeded()` asks once on first run instead of enabling
+> silently. Mention the prompt in your review notes.
 
 1. In [App Store Connect](https://appstoreconnect.apple.com): Apps ▸ + ▸ New
    App ▸ platform **macOS**, bundle ID `com.gorvgoyl.PopupNotes`.

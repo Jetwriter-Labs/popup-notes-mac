@@ -74,7 +74,8 @@ Original architecture & scope rationale:
   so still zero third-party deps. Pure logic + the SwiftData repository live in
   the **`PopupNotesCore`** SwiftPM package; run its tests with
   `./scripts/test-core.sh` (works on Command Line Tools or full Xcode).
-- **`SMAppService.mainApp`** for launch-at-login (on by default, first run only).
+- **`SMAppService.mainApp`** for launch-at-login (one-time consent prompt on
+  first run — App Review 2.4.5(iii) forbids silent enabling).
 - **Swift Testing** (`import Testing`) for tests.
 - **Xcode 26.5** to build (Command Line Tools alone are not enough for a GUI
   app bundle).
@@ -85,7 +86,7 @@ Original architecture & scope rationale:
 | Unit | Responsibility |
 |---|---|
 | `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra` + the `Settings` scene; bridges to `AppDelegate`. |
-| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-run launch-at-login default; wires hotkey → panel; saves on quit. |
+| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-run launch-at-login consent prompt; wires hotkey → panel; saves on quit. |
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
 | `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide, click-outside monitor, Esc. |
 | `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |

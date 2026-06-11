@@ -27,11 +27,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         migrateLegacyIfNeeded()
-        LaunchAtLogin.applyFirstRunDefaultIfNeeded()
         let ok = hotKey.register(.default) { [weak self] in self?.panel.toggle() }
         if !ok {
             NSLog("PopupNotes: hotkey registration failed; use the menu-bar item.")
         }
+        // After the hotkey so the app is usable while the prompt is up.
+        LaunchAtLogin.promptForConsentIfNeeded()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
