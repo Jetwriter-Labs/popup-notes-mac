@@ -50,6 +50,9 @@ developer-id)
         -exportOptionsPlist scripts/export-developer-id.plist \
         -exportPath dist/export -allowProvisioningUpdates -quiet
     make_dmg "dist/export/$SCHEME.app" "dist/$SCHEME-$VERSION.dmg"
+    # Sign the DMG container itself, not just the app inside — Gatekeeper's
+    # primary-signature assessment rejects unsigned images.
+    codesign --force --sign "Developer ID Application" --timestamp "dist/$SCHEME-$VERSION.dmg"
     if [[ -n "${NOTARY_PROFILE:-}" ]]; then
         echo "▸ Notarizing (waits for Apple — typically a few minutes)…"
         xcrun notarytool submit "dist/$SCHEME-$VERSION.dmg" \
