@@ -1,50 +1,62 @@
-# Popup Notes for macOS
+# Popup Notes
 
-A native macOS menu-bar utility: press a global shortcut (**⌃⌘N**) from any app
-to overlay a translucent scratchpad over whatever you're doing, jot a quick
-note, and dismiss it. One persistent plain-text file. Native, fast, zero
-third-party dependencies.
+**Press a hotkey anywhere on your Mac. A notes panel pops up over whatever
+you're doing. Jot, hit Esc, back to work.**
 
-> **Status: early development.** The core logic is built and tested; the app
-> shell is in progress (needs Xcode — see below).
+Popup Notes is a free, open-source menu-bar utility for capturing thoughts
+without breaking flow — no Dock icon, no window juggling, no cloud.
 
-## How it works
+## Features
 
-- **Trigger:** a fixed global hotkey (⌃⌘N) via Carbon `RegisterEventHotKey`.
-- **UI:** a non-activating, floating `NSPanel` hosting a SwiftUI `TextEditor`,
-  centered on the display under the mouse — overlays the current app without
-  stealing focus away from it.
-- **Model:** a single persistent scratchpad at
-  `~/Library/Application Support/PopupNotes/scratchpad.md`, saved with debounced
-  atomic writes.
-- **Shell:** a menu-bar accessory app (no Dock icon).
+- **Global hotkey** — `⌃⌘N` by default, customizable in Settings. Works over
+  any app, full-screen apps and all Spaces included.
+- **Doesn't steal your context** — the panel floats over the current app
+  without deactivating it, and focus returns the moment you dismiss.
+- **Multiple notes** — a sidebar lists every note, titled by its first line.
+  `⌘N` for a new one.
+- **Fully local & private** — notes live in a SwiftData (SQLite) database on
+  your Mac. No analytics, no tracking, no account, no network. JSON
+  export/import is your backup and portability path.
+- **Native and fast** — Swift 6 + SwiftUI + AppKit, zero third-party
+  dependencies, instant keyboard focus.
+
+## Install
+
+Download the notarized DMG from
+[Releases](https://github.com/GorvGoyl/popup-notes-mac/releases), drag
+**Popup Notes** to Applications, launch, and press `⌃⌘N`.
+
+Or build from source (requires Xcode 26+):
+
+```sh
+git clone https://github.com/GorvGoyl/popup-notes-mac.git
+cd popup-notes-mac
+xcodebuild -project PopupNotes/PopupNotes.xcodeproj -scheme PopupNotes build
+```
 
 ## Project layout
 
 | Path | What |
 |---|---|
-| [`PopupNotesCore/`](PopupNotesCore/) | SwiftPM package — pure logic (hotkey, persistence, store). Built & unit-tested without Xcode. |
-| `PopupNotes/` | The Xcode app shell (menu bar, panel, focus handoff). *In progress.* |
-| [`docs/superpowers/specs/`](docs/superpowers/specs/) | Design specs. |
-| [`docs/superpowers/plans/`](docs/superpowers/plans/) | Implementation plan + progress. |
+| `PopupNotes/` | The app: menu bar shell, floating panel, hotkey, Settings. |
+| [`PopupNotesCore/`](PopupNotesCore/) | SwiftPM package — pure logic (notes model, repository, JSON codec, hotkey combo). Tested without Xcode: `./scripts/test-core.sh` |
+| [`scripts/release.sh`](scripts/release.sh) | Build → sign → notarize → DMG. |
+| [`docs/`](docs/) | Design specs and the release guide. |
 
-## Build & test
+## Tech
 
-**Core logic** (no Xcode required — works on the Command Line Tools):
-
-```sh
-./scripts/test-core.sh
-```
-
-**The app** (requires **Xcode 26.5**):
-
-```sh
-xcodebuild -scheme PopupNotes -configuration Debug build
-xcodebuild -scheme PopupNotes -destination 'platform=macOS' test
-```
-
-## Tech stack
-
-Swift 6 (strict concurrency) · SwiftUI + AppKit · Observation (`@Observable`) ·
-Carbon hotkey · Foundation persistence · Swift Testing · **no third-party
+Swift 6 (strict concurrency) · SwiftUI + AppKit (`NSPanel`) · SwiftData ·
+Carbon `RegisterEventHotKey` · Swift Testing · sandboxed · **no third-party
 dependencies**.
+
+## About the makers
+
+Popup Notes is built by the team behind **[JetWriter](https://jetwriter.ai)** —
+your personal AI writing assistant in the browser. It writes emails in your
+voice (it learns from your past ones), fixes grammar, translates, and lets you
+chat with any webpage — without switching tabs. If a notes popup saves you
+seconds, JetWriter saves you the whole email.
+
+## License
+
+[MIT](LICENSE) © 2026 Gourav Goyal

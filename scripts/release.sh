@@ -21,6 +21,7 @@ cd "$(dirname "$0")/.."
 MODE="${1:-dev}"
 PROJECT=PopupNotes/PopupNotes.xcodeproj
 SCHEME=PopupNotes
+PRODUCT="Popup Notes"   # PRODUCT_NAME — the .app bundle is "Popup Notes.app"
 ARCHIVE=build/PopupNotes.xcarchive
 
 echo "▸ Archiving $SCHEME (Release)…"
@@ -40,8 +41,8 @@ make_dmg() { # $1 = path to .app, $2 = output dmg
 
 case "$MODE" in
 dev)
-    cp -R "$ARCHIVE/Products/Applications/$SCHEME.app" dist/
-    make_dmg "dist/$SCHEME.app" "dist/$SCHEME-$VERSION.dmg"
+    cp -R "$ARCHIVE/Products/Applications/$PRODUCT.app" dist/
+    make_dmg "dist/$PRODUCT.app" "dist/$SCHEME-$VERSION.dmg"
     echo "⚠ Dev-signed only: recipients must approve it in System Settings ▸ Privacy & Security."
     ;;
 developer-id)
@@ -49,7 +50,7 @@ developer-id)
     xcodebuild -exportArchive -archivePath "$ARCHIVE" \
         -exportOptionsPlist scripts/export-developer-id.plist \
         -exportPath dist/export -allowProvisioningUpdates -quiet
-    make_dmg "dist/export/$SCHEME.app" "dist/$SCHEME-$VERSION.dmg"
+    make_dmg "dist/export/$PRODUCT.app" "dist/$SCHEME-$VERSION.dmg"
     # Sign the DMG container itself, not just the app inside — Gatekeeper's
     # primary-signature assessment rejects unsigned images.
     codesign --force --sign "Developer ID Application" --timestamp "dist/$SCHEME-$VERSION.dmg"

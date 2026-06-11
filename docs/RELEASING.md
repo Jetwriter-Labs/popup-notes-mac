@@ -50,7 +50,7 @@ the Carbon hotkey / `SMAppService` all work sandboxed.
 > silently. Mention the prompt in your review notes.
 
 1. In [App Store Connect](https://appstoreconnect.apple.com): Apps ▸ + ▸ New
-   App ▸ platform **macOS**, bundle ID `com.gorvgoyl.PopupNotes`.
+   App ▸ platform **macOS**, bundle ID `ai.jetwriter.popupnotes`.
 2. Fill the listing: description, keywords, support URL, a **privacy policy
    URL** (required even for "Data Not Collected"), and screenshots (current
    accepted macOS sizes incl. 1280×800, 1440×900, 2560×1600, 2880×1800 — the
@@ -62,7 +62,7 @@ the Carbon hotkey / `SMAppService` all work sandboxed.
    ./scripts/release.sh app-store
    ```
 
-   then upload `dist/appstore/PopupNotes.pkg` with the **Transporter** app (or
+   then upload the `.pkg` from `dist/appstore/` with the **Transporter** app (or
    use Xcode ▸ Window ▸ Organizer ▸ Distribute App and skip the script).
 5. Select the build on the version page and add **review notes**: explain it's
    a menu-bar-only app (no Dock icon), the panel opens with ⌃⌘N, and quitting

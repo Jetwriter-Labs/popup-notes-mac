@@ -43,8 +43,8 @@ up first.
 
 ## What this app is
 
-- **Trigger:** a fixed global shortcut (default **⌃⌘N**) registered via Carbon
-  `RegisterEventHotKey`.
+- **Trigger:** a global shortcut (default **⌃⌘N**, user-customizable via the
+  Settings recorder) registered via Carbon `RegisterEventHotKey`.
 - **UI:** a non-activating, floating, **resizable** `NSPanel` hosting a SwiftUI
   `NavigationSplitView` — a sidebar list of notes beside the selected note's
   `TextEditor` — overlaid over the current app without stealing it away.
@@ -91,7 +91,7 @@ Original architecture & scope rationale:
 | `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide, click-outside monitor, Esc. |
 | `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |
 | `NotesView` · `NotesListView` · `NoteDetailView` | SwiftUI master-detail: `@Query` sidebar (title + date, new/delete-with-confirm) + the selected note's `TextEditor`. |
-| `SettingsView` | `Settings` scene: launch-at-login toggle + JSON export/import. |
+| `SettingsView` · `HotKeyRecorderView` | `Settings` scene, two tabs — General: launch-at-login toggle, global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. |
 | `Note` (`@Model`) · `NotesRepository` | SwiftData model (id, text, created, modified; first-line `title`) + CRUD (create/delete/sort/upsert). In `PopupNotesCore`. |
 | `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import. In `PopupNotesCore`. |
 
@@ -171,7 +171,7 @@ open **Settings (⌘,)** and try export/import; test once over a full-screen app
   Spaces.
 - **Sandboxed** — the Xcode app template enabled App Sandbox and we kept it
   (this **supersedes the original specs' non-sandboxed plan**). Data lives in
-  the app container, e.g. `~/Library/Containers/com.gorvgoyl.PopupNotes/Data/
+  the app container, e.g. `~/Library/Containers/ai.jetwriter.popupnotes/Data/
   Library/Application Support/PopupNotes/Notes.store`, **not** a user-visible
   folder. File-picker export/import works via the sandbox powerbox; SwiftData,
   the Carbon hotkey, and `SMAppService` all work sandboxed.
