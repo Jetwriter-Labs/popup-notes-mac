@@ -28,6 +28,7 @@ struct NotesView: View {
                                        description: Text("Select a note or create one."))
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) { OnboardingStripView() }
         .frame(minWidth: 360, minHeight: 220)
         .onAppear(perform: restoreSelection)
         .onChange(of: selection) { _, newValue in
