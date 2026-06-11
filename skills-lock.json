@@ -1,12 +1,6 @@
 {
   "version": 1,
   "skills": {
-    "ai-sdk": {
-      "source": "vercel/vercel-plugin",
-      "sourceType": "github",
-      "skillPath": "skills/ai-sdk/SKILL.md",
-      "computedHash": "bf4a80dc8c1e0e2557af681714b063a92de2fa3ac8f425c2f8c225b15ca4b893"
-    },
     "deploy-to-vercel": {
       "source": "vercel-labs/agent-skills",
       "sourceType": "github",
