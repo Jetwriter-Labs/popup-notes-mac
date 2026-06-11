@@ -13,6 +13,7 @@ struct NoteDetailView: View {
         ))
         // The detail column's 52pt top toolbar strip is empty (controls live in
         // the sidebar), so let the editor fill it and start the text at the top.
+        // Top only — the bottom safe area carries the onboarding strip (see NotesView).
         .ignoresSafeArea(.container, edges: .top)
     }
 }

@@ -74,8 +74,8 @@ Original architecture & scope rationale:
   so still zero third-party deps. Pure logic + the SwiftData repository live in
   the **`PopupNotesCore`** SwiftPM package; run its tests with
   `./scripts/test-core.sh` (works on Command Line Tools or full Xcode).
-- **`SMAppService.mainApp`** for launch-at-login (one-time consent prompt on
-  first run — App Review 2.4.5(iii) forbids silent enabling).
+- **`SMAppService.mainApp`** for launch-at-login (consent via the onboarding
+  strip's Enable button — App Review 2.4.5(iii) forbids silent enabling).
 - **Swift Testing** (`import Testing`) for tests.
 - **Xcode 26.5** to build (Command Line Tools alone are not enough for a GUI
   app bundle).
@@ -86,14 +86,15 @@ Original architecture & scope rationale:
 | Unit | Responsibility |
 |---|---|
 | `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra` + the `Settings` scene; bridges to `AppDelegate`. |
-| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-run launch-at-login consent prompt; wires hotkey → panel; saves on quit. |
+| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-launch onboarding (seed Welcome note, auto-show panel, reconcile pre-consent login default); wires hotkey → panel and records registration status; saves on quit. |
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
 | `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide, click-outside monitor, Esc. |
 | `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |
 | `NotesView` · `NotesListView` · `NoteDetailView` | SwiftUI master-detail: `@Query` sidebar (title + date, new/delete-with-confirm) + the selected note's `TextEditor`. |
+| `OnboardingStripView` · `OnboardingDefaults` | Self-retiring bottom strip: hotkey hint (until first hotkey use or dismissal; failure variant when registration fails) + launch-at-login Enable/Not Now consent; one-time `UserDefaults` flags. |
 | `SettingsView` · `HotKeyRecorderView` | `Settings` scene, two tabs — General: launch-at-login toggle, global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. |
 | `Note` (`@Model`) · `NotesRepository` | SwiftData model (id, text, created, modified; first-line `title`) + CRUD (create/delete/sort/upsert). In `PopupNotesCore`. |
-| `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import. In `PopupNotesCore`. |
+| `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content. In `PopupNotesCore`. |
 
 ## Conventions & principles
 
@@ -151,10 +152,19 @@ xcodebuild -scheme PopupNotes -destination 'platform=macOS' test
 
 Or open `PopupNotes.xcodeproj` in Xcode and Run (⌘R) / Test (⌘U).
 
-Manual smoke test: launch, confirm the menu-bar icon (no Dock icon), press
-**⌃⌘N**, create a note (**⌘N**) and type a first line (it becomes the sidebar
-title), switch between notes, press **Esc**; reopen and confirm notes persisted;
-open **Settings (⌘,)** and try export/import; test once over a full-screen app.
+Manual smoke test: reset state (`defaults delete ai.jetwriter.popupnotes`;
+for a true fresh install also quit the app and delete
+`~/Library/Containers/ai.jetwriter.popupnotes` — this erases all notes).
+Launch: the panel auto-opens showing the seeded "Welcome to Popup Notes 👋"
+note with the onboarding strip at the bottom (hotkey hint + launch-at-login
+row). Press **⌃⌘N**: the panel toggles and the hint row is gone for good.
+Click **Enable**: the app appears in System Settings ▸ General ▸ Login
+Items and the consent row disappears. Create a note (**⌘N**), type a first
+line (it becomes the sidebar title), switch notes, press **Esc**; reopen
+and confirm persistence. Relaunch: no auto-show, no strip. Open
+**Settings (⌘,)**, record a new shortcut and confirm the hint (after
+resetting only its flags) mirrors it; try export/import; test once over a
+full-screen app.
 
 ## Key gotchas / constraints
 
