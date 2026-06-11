@@ -5,6 +5,7 @@ import PopupNotesCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let container: ModelContainer
+    private(set) var currentHotKey = HotKeyStore.saved
     private let hotKey = HotKeyManager()
     private let panel: PanelController
 
@@ -27,12 +28,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         migrateLegacyIfNeeded()
-        let ok = hotKey.register(.default) { [weak self] in self?.panel.toggle() }
+        let ok = hotKey.register(currentHotKey) { [weak self] in self?.panel.toggle() }
         if !ok {
             NSLog("PopupNotes: hotkey registration failed; use the menu-bar item.")
         }
         // After the hotkey so the app is usable while the prompt is up.
-        LaunchAtLogin.promptForConsentIfNeeded()
+        LaunchAtLogin.promptForConsentIfNeeded(hotKeyDisplay: currentHotKey.displayString)
+    }
+
+    /// Re-registers the global hotkey; restores the old combo and returns
+    /// false if the new one is rejected (invalid or already taken).
+    func applyHotKey(_ combo: HotKeyCombo) -> Bool {
+        guard combo != currentHotKey else { return true }
+        hotKey.unregister()
+        if hotKey.register(combo, onFire: { [weak self] in self?.panel.toggle() }) {
+            currentHotKey = combo
+            HotKeyStore.saved = combo
+            return true
+        }
+        hotKey.register(currentHotKey) { [weak self] in self?.panel.toggle() }
+        return false
     }
 
     func applicationWillTerminate(_ notification: Notification) {

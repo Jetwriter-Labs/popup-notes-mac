@@ -20,10 +20,11 @@ enum LaunchAtLogin {
         }
     }
 
-    /// Asks once, on first run, whether to launch at login. App Review
-    /// guideline 2.4.5(iii) forbids enabling this without consent, so the
-    /// answer — not a silent default — decides. Subsequent user toggles win.
-    static func promptForConsentIfNeeded() {
+    /// Asks once, on first run, whether to launch at login — and tells the
+    /// user the current hotkey while at it. App Review guideline 2.4.5(iii)
+    /// forbids enabling login launch without consent, so the answer — not a
+    /// silent default — decides. Subsequent user toggles win.
+    static func promptForConsentIfNeeded(hotKeyDisplay: String) {
         let key = "didPromptLaunchAtLogin"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
@@ -31,9 +32,11 @@ enum LaunchAtLogin {
         let alert = NSAlert()
         alert.messageText = "Launch Popup Notes at login?"
         alert.informativeText = """
-            Popup Notes lives in the menu bar, so launching it at login keeps \
-            ⌃⌘N ready whenever you need a note. You can change this anytime \
-            in Settings (⌘,).
+            Press \(hotKeyDisplay) in any app to open your notes.
+
+            Popup Notes lives in the menu bar; launching it at login keeps \
+            that shortcut ready from the moment you sign in. You can change \
+            both anytime in Settings (⌘,).
             """
         alert.addButton(withTitle: "Launch at Login")
         alert.addButton(withTitle: "Not Now")

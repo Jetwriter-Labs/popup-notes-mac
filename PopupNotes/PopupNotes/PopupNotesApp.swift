@@ -6,8 +6,9 @@ struct PopupNotesApp: App {
 
     var body: some Scene {
         MenuBarExtra("Popup Notes", systemImage: "note.text") {
+            // Mirrors the user's custom global hotkey (nil for non-character keys).
             Button("Show Notes") { appDelegate.showNotes() }
-                .keyboardShortcut("n", modifiers: [.control, .command])
+                .keyboardShortcut(appDelegate.currentHotKey.swiftUIShortcut)
             Divider()
             SettingsLink { Text("Settings…") }
             Divider()
@@ -16,7 +17,7 @@ struct PopupNotesApp: App {
         }
 
         Settings {
-            SettingsView(container: appDelegate.container)
+            SettingsView(container: appDelegate.container, appDelegate: appDelegate)
         }
     }
 }

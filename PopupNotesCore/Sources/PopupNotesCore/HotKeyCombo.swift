@@ -38,3 +38,58 @@ public struct HotKeyCombo: Sendable, Equatable {
         !modifiers.isDisjoint(with: [.command, .control])
     }
 }
+
+// MARK: - Persistence
+
+extension KeyModifiers: Codable {
+    public init(from decoder: Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(UInt32.self))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+}
+
+extension HotKeyCombo: Codable {}
+
+// MARK: - Display
+
+extension HotKeyCombo {
+    /// Human-readable form, e.g. `⌃⌘N`. Modifier symbols follow the order
+    /// macOS renders everywhere: Control, Option, Shift, Command.
+    public var displayString: String {
+        var result = ""
+        if modifiers.contains(.control) { result += "⌃" }
+        if modifiers.contains(.option)  { result += "⌥" }
+        if modifiers.contains(.shift)   { result += "⇧" }
+        if modifiers.contains(.command) { result += "⌘" }
+        return result + (Self.keyNames[keyCode] ?? "Key \(keyCode)")
+    }
+
+    /// The plain character for SwiftUI's `KeyEquivalent`, when one exists.
+    /// Function keys, arrows, and other non-character keys return nil.
+    public var keyEquivalentCharacter: Character? {
+        if keyCode == 49 { return " " } // Space
+        guard let name = Self.keyNames[keyCode], name.count == 1,
+              let char = name.lowercased().first, char.isASCII else { return nil }
+        return char
+    }
+
+    /// Carbon `kVK_*` virtual key codes → display names (US ANSI layout).
+    private static let keyNames: [UInt32: String] = [
+        0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
+        8: "C", 9: "V", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",
+        16: "Y", 17: "T", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6",
+        23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
+        30: "]", 31: "O", 32: "U", 33: "[", 34: "I", 35: "P", 37: "L",
+        38: "J", 39: "'", 40: "K", 41: ";", 42: "\\", 43: ",", 44: "/",
+        45: "N", 46: "M", 47: ".", 50: "`",
+        36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "⎋", 117: "⌦",
+        115: "↖", 119: "↘", 116: "⇞", 121: "⇟",
+        123: "←", 124: "→", 125: "↓", 126: "↑",
+        122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6",
+        98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12",
+    ]
+}

@@ -4,18 +4,31 @@ import AppKit
 import UniformTypeIdentifiers
 import PopupNotesCore
 
-/// The Settings window: launch-at-login plus JSON export/import.
+/// The Settings window: General (launch-at-login, global shortcut, JSON
+/// export/import) and About (local-only promise, open source, JetWriter).
 struct SettingsView: View {
     let container: ModelContainer
+    let appDelegate: AppDelegate
     @State private var status: String?
 
     var body: some View {
+        TabView {
+            Tab("General", systemImage: "gearshape") { general }
+            Tab("About", systemImage: "info.circle") { AboutView() }
+        }
+        .frame(width: 460)
+    }
+
+    private var general: some View {
         Form {
             Section {
                 Toggle("Launch at Login", isOn: Binding(
                     get: { LaunchAtLogin.isEnabled },
                     set: { LaunchAtLogin.isEnabled = $0 }
                 ))
+            }
+            Section("Shortcut") {
+                HotKeyRecorderView { appDelegate.applyHotKey($0) }
             }
             Section("Data") {
                 LabeledContent("Export all notes") {
@@ -30,7 +43,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 420, height: 240)
+        .frame(height: 300)
     }
 
     private func exportNotes() {
@@ -63,5 +76,44 @@ struct SettingsView: View {
         incoming.forEach { repo.upsert($0) }
         repo.save()
         status = "Imported \(incoming.count) note(s)."
+    }
+}
+
+/// Who made this, what it does with your data (nothing), and where the code is.
+private struct AboutView: View {
+    private static let repoURL = URL(string: "https://github.com/GorvGoyl/popup-notes-mac")!
+    private static let jetwriterURL = URL(string: "https://jetwriter.ai")!
+
+    private var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .frame(width: 64, height: 64)
+            Text("Popup Notes").font(.title2.bold())
+            Text("Version \(version)").font(.callout).foregroundStyle(.secondary)
+
+            Text("""
+                Fully local: your notes live in a database on this Mac and \
+                never leave it. No analytics, no tracking, no account.
+                """)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+
+            HStack(spacing: 16) {
+                Link("Open source — GitHub", destination: Self.repoURL)
+                Link("Made by JetWriter", destination: Self.jetwriterURL)
+            }
+
+            Text("© 2026 Gourav Goyal · MIT License")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(24)
+        .frame(height: 300)
     }
 }
