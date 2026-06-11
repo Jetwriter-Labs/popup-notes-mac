@@ -11,20 +11,16 @@ struct NotesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Note.modified, order: .reverse) private var notes: [Note]
     @State private var selection: UUID?
-    @State private var searchText = ""
     @AppStorage("lastSelectedNoteID") private var lastSelectedRaw = ""
 
     var body: some View {
         NavigationSplitView {
-            NotesListView(notes: NoteSearch.filter(notes, matching: searchText),
+            NotesListView(notes: notes,
                           selection: $selection,
-                          searchText: $searchText,
                           onNew: newNote,
                           onDelete: delete)
                 .navigationSplitViewColumnWidth(min: 130, ideal: 200)
         } detail: {
-            // Resolve from the *unfiltered* `notes` on purpose: the selected note stays
-            // open in the editor even when the active search filter hides it from the list.
             if let id = selection, let note = notes.first(where: { $0.id == id }) {
                 NoteDetailView(note: note).id(id)
             } else {
@@ -37,12 +33,7 @@ struct NotesView: View {
         .onChange(of: selection) { _, newValue in
             lastSelectedRaw = newValue?.uuidString ?? ""
         }
-        .onExitCommand {
-            if searchText.isEmpty { onEscape() } else { searchText = "" }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .popupNotesPanelDidHide)) { _ in
-            searchText = ""
-        }
+        .onExitCommand { onEscape() }
     }
 
     private func restoreSelection() {
@@ -55,7 +46,6 @@ struct NotesView: View {
     }
 
     private func newNote() {
-        searchText = ""
         let note = Note()
         context.insert(note)
         selection = note.id
