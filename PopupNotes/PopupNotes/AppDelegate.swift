@@ -28,12 +28,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         migrateLegacyIfNeeded()
-        let ok = hotKey.register(currentHotKey) { [weak self] in self?.panel.toggle() }
+        let ok = hotKey.register(currentHotKey) { [weak self] in self?.handleHotKeyFire() }
+        OnboardingDefaults.hotKeyRegistered = ok
         if !ok {
             NSLog("PopupNotes: hotkey registration failed; use the menu-bar item.")
         }
-        // After the hotkey so the app is usable while the prompt is up.
-        LaunchAtLogin.promptForConsentIfNeeded(hotKeyDisplay: currentHotKey.displayString)
+        runFirstLaunchOnboardingIfNeeded()
     }
 
     /// Re-registers the global hotkey; restores the old combo and returns
@@ -41,13 +41,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applyHotKey(_ combo: HotKeyCombo) -> Bool {
         guard combo != currentHotKey else { return true }
         hotKey.unregister()
-        if hotKey.register(combo, onFire: { [weak self] in self?.panel.toggle() }) {
+        if hotKey.register(combo, onFire: { [weak self] in self?.handleHotKeyFire() }) {
             currentHotKey = combo
             HotKeyStore.saved = combo
+            OnboardingDefaults.hotKeyRegistered = true
             return true
         }
-        hotKey.register(currentHotKey) { [weak self] in self?.panel.toggle() }
+        let restored = hotKey.register(currentHotKey) { [weak self] in self?.handleHotKeyFire() }
+        OnboardingDefaults.hotKeyRegistered = restored
         return false
+    }
+
+    /// Records the first real hotkey use (retires the strip's hint row),
+    /// then toggles the panel. The guarded write keeps the hot path lean.
+    private func handleHotKeyFire() {
+        if !OnboardingDefaults.didUseHotkeyOnce {
+            OnboardingDefaults.didUseHotkeyOnce = true
+        }
+        panel.toggle()
+    }
+
+    /// First launch only (also fires once for users upgrading from builds
+    /// without this flag): seed the Welcome note when the database is empty
+    /// — after legacy migration, so importers keep their own content — and
+    /// show the panel so the user experiences the popup immediately.
+    private func runFirstLaunchOnboardingIfNeeded() {
+        guard !OnboardingDefaults.didRunFirstLaunchOnboarding else { return }
+        OnboardingDefaults.didRunFirstLaunchOnboarding = true
+        let repo = NotesRepository(context: container.mainContext)
+        if repo.allSortedByModified().isEmpty {
+            repo.create(text: WelcomeNote.text(hotKeyDisplay: currentHotKey.displayString))
+            repo.save()
+        }
+        panel.show()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
