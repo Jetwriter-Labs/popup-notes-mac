@@ -37,9 +37,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Re-registers the global hotkey; restores the old combo and returns
-    /// false if the new one is rejected (invalid or already taken).
+    /// false if the new one is rejected (invalid or already taken). A combo
+    /// equal to the current one is a no-op only while the current
+    /// registration is healthy — after a failure it re-attempts, so
+    /// re-recording the same shortcut can recover once a conflict clears.
     func applyHotKey(_ combo: HotKeyCombo) -> Bool {
-        guard combo != currentHotKey else { return true }
+        guard combo != currentHotKey || !OnboardingDefaults.hotKeyRegistered else { return true }
         hotKey.unregister()
         if hotKey.register(combo, onFire: { [weak self] in self?.handleHotKeyFire() }) {
             currentHotKey = combo
@@ -49,6 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let restored = hotKey.register(currentHotKey) { [weak self] in self?.handleHotKeyFire() }
         OnboardingDefaults.hotKeyRegistered = restored
+        if !restored {
+            NSLog("PopupNotes: failed to restore the previous hotkey; use the menu-bar item.")
+        }
         return false
     }
 
@@ -68,6 +74,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func runFirstLaunchOnboardingIfNeeded() {
         guard !OnboardingDefaults.didRunFirstLaunchOnboarding else { return }
         OnboardingDefaults.didRunFirstLaunchOnboarding = true
+        // Undo the pre-consent-era silent default (builds before cc4294f
+        // enabled launch-at-login unasked): if that era's flag is present and
+        // no consent prompt was ever answered, disable it — the onboarding
+        // strip's row asks properly from here on.
+        if UserDefaults.standard.bool(forKey: "didApplyFirstRunDefaults"),
+           !UserDefaults.standard.bool(forKey: OnboardingDefaults.didPromptLaunchAtLoginKey),
+           LaunchAtLogin.isEnabled {
+            LaunchAtLogin.isEnabled = false
+        }
         let repo = NotesRepository(context: container.mainContext)
         if repo.allSortedByModified().isEmpty {
             repo.create(text: WelcomeNote.text(hotKeyDisplay: currentHotKey.displayString))

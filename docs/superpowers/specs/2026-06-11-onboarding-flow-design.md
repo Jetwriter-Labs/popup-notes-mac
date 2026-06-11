@@ -35,7 +35,7 @@ both are better as inline, self-dismissing UI.
 | Teaching content | **Seeded Welcome note**, only when the DB is empty post-migration | First line *is* the title — demonstrates the title rule by existing. Legacy importers keep their content, get no seed. |
 | Hotkey retention | **Hint row in a bottom onboarding strip**, shown until the user first fires the hotkey (or clicks its X) | The row's disappearance is the success feedback. Live-mirrors the current combo from `HotKeyStore`. |
 | Hotkey failure | Hint row swaps to a **"shortcut unavailable — set a new one in Settings (⌘,)"** variant when registration fails | Replaces today's silent `NSLog`-only failure. |
-| Launch-at-login consent | **Inline strip row** with Enable / Not Now buttons | Explicit click = 2.4.5(iii) consent. The `NSAlert` and `promptForConsentIfNeeded` are deleted. Reuses the `didPromptLaunchAtLogin` flag, so upgraders are never re-asked. |
+| Launch-at-login consent | **Inline strip row** with Enable / Not Now buttons | Explicit click = 2.4.5(iii) consent. The `NSAlert` and `promptForConsentIfNeeded` are deleted; a one-time launch reconciliation disables any pre-consent-era silent default (legacy `didApplyFirstRunDefaults` installs). Reuses the `didPromptLaunchAtLogin` flag, so upgraders who answered are never re-asked. |
 | Consent failure | If `SMAppService.register()` throws on Enable, the row still hides; failure is logged; Settings toggle shows truth | Accepted trade-off — no retry UI in v1. |
 | Welcome note staleness | Seeded text embeds the combo at seed time and is **not** updated on later shortcut changes | It's the user's note once seeded; the strip is the live element. |
 

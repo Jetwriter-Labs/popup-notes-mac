@@ -338,7 +338,7 @@ enum LaunchAtLogin {
 }
 ```
 
-(`promptForConsentIfNeeded` and the `AppKit` import are deleted; the pre-consent-default cleanup branch it contained is obsolete — any affected install already ran it under the same flag.)
+(`promptForConsentIfNeeded` and the `AppKit` import are deleted; the pre-consent-default cleanup moves to a one-time reconciliation in runFirstLaunchOnboardingIfNeeded, keyed on the legacy didApplyFirstRunDefaults flag — review found upgraders straight from the silent-enable era would otherwise keep an unconsented login item.)
 
 - [ ] **Step 3: Build to verify**
 
