@@ -19,6 +19,9 @@ final class PanelController {
     func toggle() { isVisible ? hide() : show() }
 
     func show() {
+        // Already on screen (e.g. menu-bar "Show Notes" while open): re-showing
+        // would re-capture previousApp and leak a second click monitor.
+        guard !isVisible else { return }
         let panel = panel ?? makePanel()
         self.panel = panel
         previousApp = NSWorkspace.shared.frontmostApplication
