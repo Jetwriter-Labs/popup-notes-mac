@@ -81,7 +81,7 @@ struct SettingsView: View {
 
 /// Who made this, what it does with your data (nothing), and where the code is.
 private struct AboutView: View {
-    private static let repoURL = URL(string: "https://github.com/GorvGoyl/popup-notes-mac")!
+    private static let repoURL = URL(string: "https://github.com/Jetwriter-Labs/popup-notes-mac")!
     private static let jetwriterURL = URL(string: "https://jetwriter.ai")!
 
     private var version: String {

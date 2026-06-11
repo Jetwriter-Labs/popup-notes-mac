@@ -23,13 +23,13 @@ without breaking flow — no Dock icon, no window juggling, no cloud.
 ## Install
 
 Download the notarized DMG from
-[Releases](https://github.com/GorvGoyl/popup-notes-mac/releases), drag
+[Releases](https://github.com/Jetwriter-Labs/popup-notes-mac/releases), drag
 **Popup Notes** to Applications, launch, and press `⌃⌘N`.
 
 Or build from source (requires Xcode 26+):
 
 ```sh
-git clone https://github.com/GorvGoyl/popup-notes-mac.git
+git clone https://github.com/Jetwriter-Labs/popup-notes-mac.git
 cd popup-notes-mac
 xcodebuild -project PopupNotes/PopupNotes.xcodeproj -scheme PopupNotes build
 ```
