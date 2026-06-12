@@ -45,9 +45,11 @@ set, privacy manifest bundled, export-compliance key declared, and SwiftData /
 the Carbon hotkey / `SMAppService` all work sandboxed.
 
 > **Review guideline 2.4.5(iii) — handled:** Mac apps "may not auto-launch …
-> at startup or login without consent," so `LaunchAtLogin.
-> promptForConsentIfNeeded()` asks once on first run instead of enabling
-> silently. Mention the prompt in your review notes.
+> at startup or login without consent," so launch-at-login is enabled only by
+> the user clicking **Enable** in the first-run onboarding strip at the bottom
+> of the notes panel (or the Settings toggle) — never silently. A one-time
+> launch reconciliation also disables any pre-consent default left by old
+> builds. Mention the strip's Enable/Not Now consent in your review notes.
 
 1. In [App Store Connect](https://appstoreconnect.apple.com): Apps ▸ + ▸ New
    App ▸ platform **macOS**, bundle ID `ai.jetwriter.popupnotes`.

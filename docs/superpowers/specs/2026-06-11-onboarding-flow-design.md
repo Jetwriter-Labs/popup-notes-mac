@@ -61,6 +61,8 @@ applicationDidFinishLaunching
 └── runFirstLaunchOnboardingIfNeeded()
     ├── guard !didRunFirstLaunchOnboarding else return
     ├── set didRunFirstLaunchOnboarding = true
+    ├── reconcile pre-consent default: legacy didApplyFirstRunDefaults set
+    │   + consent never answered + login item enabled → disable it
     ├── if DB is empty: seed Welcome note (NotesRepository.create + save)
     └── panel.show()                          (existing centering/show path)
 ```
@@ -113,9 +115,10 @@ once both are retired):
 | `didRunFirstLaunchOnboarding` | new | `AppDelegate` after auto-show | `AppDelegate` |
 | `didUseHotkeyOnce` | new | hotkey closure in `AppDelegate` (guarded write) | strip |
 | `didDismissHotkeyHint` | new | strip's X button | strip |
-| `didPromptLaunchAtLogin` | reused | strip's Enable / Not Now | strip |
-| `hotKeyRegistered` | new | `AppDelegate` after each register attempt (launch + `applyHotKey`) | strip |
+| `didPromptLaunchAtLogin` | reused | strip's Enable / Not Now | strip + launch reconciliation |
+| `hotKeyRegistered` | new | `AppDelegate` after each register attempt (launch + `applyHotKey`) | strip + `applyHotKey`'s same-combo retry guard |
 | `hotKeyCombo` | existing | `HotKeyStore` | strip (display string) |
+| `didApplyFirstRunDefaults` | legacy (read-only) | old silent-enable builds (`2b4897d..cc4294f^`) | launch reconciliation |
 
 `defaults delete ai.jetwriter.popupnotes` resets the whole flow for testing.
 
@@ -128,7 +131,8 @@ once both are retired):
 | `AppDelegate` | Remove consent call; add `runFirstLaunchOnboardingIfNeeded()`; record `hotKeyRegistered`; set `didUseHotkeyOnce` in the hotkey closure. |
 | `NotesView` | Embed the strip at the panel's bottom edge. |
 | `LaunchAtLogin` | Delete `promptForConsentIfNeeded` (incl. the pre-consent cleanup branch — obsolete); keep `isEnabled`. |
-| `HotKeyManager`, `PanelController`, `FloatingPanel`, `MenuBarExtra` | Unchanged. Nothing heavy added to the show/hide path (one flag read). |
+| `PanelController` | `show()` gains a re-entry guard (menu-bar "Show Notes" while visible would re-capture `previousApp` and leak a click monitor — more reachable now that first launch auto-shows). |
+| `HotKeyManager`, `FloatingPanel`, `MenuBarExtra` | Unchanged. Nothing heavy added to the show/hide path (one flag read). |
 
 ## 8. Upgraders (existing installs)
 
