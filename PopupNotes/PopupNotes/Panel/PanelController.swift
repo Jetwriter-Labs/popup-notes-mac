@@ -18,6 +18,18 @@ final class PanelController {
     var isVisible: Bool { panel?.isVisible ?? false }
     func toggle() { isVisible ? hide() : show() }
 
+    /// Puts the panel in front of the user: shows it when hidden, re-keys it
+    /// when it is already on screen. Every "open the notes" request that is
+    /// not a toggle goes through here — `show()` alone returns silently when
+    /// the panel is already up, which makes such a request look ignored.
+    func activate() {
+        if isVisible {
+            panel?.makeKeyAndOrderFront(nil)
+        } else {
+            show()
+        }
+    }
+
     func show() {
         // Already on screen (e.g. menu-bar "Show Notes" while open): re-showing
         // would re-capture previousApp and leak a second click monitor.

@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // First: `currentAppleEvent` is only readable while AppKit dispatches
+        // the launch event, and the setup below outlives that window.
+        let launchKind = AppLaunchKind.current
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         migrateLegacyIfNeeded()
         let ok = hotKey.register(currentHotKey) { [weak self] in self?.handleHotKeyFire() }
@@ -34,6 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSLog("PopupNotes: hotkey registration failed; use the menu-bar item.")
         }
         runFirstLaunchOnboardingIfNeeded()
+        // Opening the app from Spotlight, Raycast or Finder is a request to
+        // see the notes; with no Dock icon and no main window, staying silent
+        // reads as a failure to launch. A login or Services launch must not.
+        if launchKind.shouldShowPanelOnLaunch { panel.activate() }
     }
 
     /// Re-registers the global hotkey; restores the old combo and returns
@@ -91,13 +98,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.show()
     }
 
+    /// Opening an app that is already running sends a reopen event rather
+    /// than starting a second copy — this is what Spotlight, Raycast, Finder
+    /// and `open -a` hit for all but the first launch. Left unhandled it did
+    /// nothing at all, since there is no Dock icon or window for AppKit's
+    /// default behavior to restore. Returns false: the panel *is* the
+    /// response, so AppKit should not add one of its own.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        panel.activate()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         try? container.mainContext.save()
         hotKey.unregister()
     }
 
     /// Called by the menu-bar "Show Notes" item.
-    func showNotes() { panel.show() }
+    func showNotes() { panel.activate() }
 
     /// One-time import of the pre-SwiftData scratchpad into a note.
     private func migrateLegacyIfNeeded() {

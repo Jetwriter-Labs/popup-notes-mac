@@ -86,15 +86,16 @@ Original architecture & scope rationale:
 | Unit | Responsibility |
 |---|---|
 | `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra` + the `Settings` scene; bridges to `AppDelegate`. |
-| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-launch onboarding (seed Welcome note, auto-show panel, reconcile pre-consent login default); wires hotkey → panel and records registration status; saves on quit. |
+| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-launch onboarding (seed Welcome note, auto-show panel, reconcile pre-consent login default); wires hotkey → panel and records registration status; opens the panel on a user launch and on reopen (Spotlight/Raycast/Finder); saves on quit. |
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
-| `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide, click-outside monitor, Esc. |
+| `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide/`activate`, click-outside monitor, Esc. |
 | `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |
 | `NotesView` · `NotesListView` · `NoteDetailView` | SwiftUI master-detail: `@Query` sidebar (title + date, new/delete-with-confirm) + the selected note's `TextEditor`. |
 | `OnboardingStripView` · `OnboardingDefaults` | Self-retiring bottom strip: hotkey hint (until first hotkey use or dismissal; failure variant when registration fails) + launch-at-login Enable/Not Now consent; one-time `UserDefaults` flags. |
 | `SettingsView` · `HotKeyRecorderView` | `Settings` scene, two tabs — General: launch-at-login toggle, global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. |
 | `Note` (`@Model`) · `NotesRepository` | SwiftData model (id, text, created, modified; first-line `title`) + CRUD (create/delete/sort/upsert). In `PopupNotesCore`. |
 | `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content. In `PopupNotesCore`. |
+| `AppLaunchKind` · `LaunchEvent` | Tells a user launch from a login/Services launch via the `kAEOpenApplication` event's `keyAELaunchedAsLogInItem`/`…ServiceItem` markers, so the panel opens for the former and stays hidden for the latter. Classifier in `PopupNotesCore`; Carbon event reader in the app. |
 
 ## Conventions & principles
 
@@ -161,7 +162,13 @@ row). Press **⌃⌘N**: the panel toggles and the hint row is gone for good.
 Click **Enable**: the app appears in System Settings ▸ General ▸ Login
 Items and the consent row disappears. Create a note (**⌘N**), type a first
 line (it becomes the sidebar title), switch notes, press **Esc**; reopen
-and confirm persistence. Relaunch: no auto-show, no strip. Open
+and confirm persistence. Relaunch: the panel opens (a user launch is a
+request to see the notes) but the strip is gone. Press **Esc**, then open
+"Popup Notes" from Spotlight or Raycast *while it is still running* — the
+panel must come back; that reopen path once did nothing at all. With
+launch-at-login enabled, log out and back in: the app must come up in the
+menu bar **silently**, no panel (this is the one path `open -a` cannot
+exercise — it needs a real login). Open
 **Settings (⌘,)**, record a new shortcut and confirm the hint (after
 resetting only its flags) mirrors it; try export/import; test once over a
 full-screen app.
