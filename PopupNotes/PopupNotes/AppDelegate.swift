@@ -93,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let repo = NotesRepository(context: container.mainContext)
         if repo.allSortedByModified().isEmpty {
             repo.create(text: WelcomeNote.text(hotKeyDisplay: currentHotKey.displayString))
-            repo.save()
+            try? repo.save()
         }
         panel.show()
     }
@@ -125,6 +125,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let url = LegacyScratchpad.defaultURL(), let text = LegacyScratchpad.read(at: url) else { return }
         let repo = NotesRepository(context: container.mainContext)
         repo.create(text: text)
-        repo.save()
+        try? repo.save()
     }
 }

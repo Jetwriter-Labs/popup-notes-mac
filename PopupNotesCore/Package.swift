@@ -3,12 +3,15 @@ import PackageDescription
 
 let package = Package(
     name: "PopupNotesCore",
-    platforms: [.macOS(.v14)], // Observation requires macOS 14+; app deploys to macOS 15.
+    platforms: [.macOS(.v14)], // SwiftData requires macOS 14+; the app deploys to macOS 15.6.
     products: [
         .library(name: "PopupNotesCore", targets: ["PopupNotesCore"]),
     ],
     targets: [
-        .target(name: "PopupNotesCore"),
-        .testTarget(name: "PopupNotesCoreTests", dependencies: ["PopupNotesCore"]),
+        // MemberImportVisibility matches the app target: each file imports what it uses.
+        .target(name: "PopupNotesCore",
+                swiftSettings: [.enableUpcomingFeature("MemberImportVisibility")]),
+        .testTarget(name: "PopupNotesCoreTests", dependencies: ["PopupNotesCore"],
+                    swiftSettings: [.enableUpcomingFeature("MemberImportVisibility")]),
     ]
 )

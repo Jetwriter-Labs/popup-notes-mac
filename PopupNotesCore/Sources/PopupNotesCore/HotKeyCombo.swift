@@ -3,8 +3,7 @@
 /// `KeyModifiers` raw values intentionally mirror Carbon's HIToolbox modifier
 /// masks (`cmdKey`, `shiftKey`, `optionKey`, `controlKey` from
 /// <Carbon/HIToolbox/Events.h>) so `carbonModifierFlags` is a no-op cast.
-/// ⚠️ VERIFY these equal the real Carbon constants — Task 7 adds an app-side
-/// assertion (`assert(KeyModifiers.command.rawValue == UInt32(cmdKey))`, etc.).
+/// `HotKeyComboTests` checks them against the real Carbon constants.
 public struct KeyModifiers: OptionSet, Sendable, Equatable {
     public let rawValue: UInt32
     public init(rawValue: UInt32) { self.rawValue = rawValue }
@@ -37,6 +36,12 @@ public struct HotKeyCombo: Sendable, Equatable {
     public var isValidGlobalHotKey: Bool {
         !modifiers.isDisjoint(with: [.command, .control])
     }
+
+    /// ⌘ as the only modifier (⌘V, ⌘W, ⌘Q…). A global hotkey takes its combo
+    /// away from every app, so the recorder refuses these: one stray ⌘V while
+    /// recording would break paste system-wide. A saved combo like this still
+    /// registers at launch — only new recordings are refused.
+    public var usesCommandAlone: Bool { modifiers == [.command] }
 }
 
 // MARK: - Persistence

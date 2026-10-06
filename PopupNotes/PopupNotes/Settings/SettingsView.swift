@@ -74,7 +74,7 @@ struct SettingsView: View {
         }
         let repo = NotesRepository(context: container.mainContext)
         incoming.forEach { repo.upsert($0) }
-        repo.save()
+        try? repo.save()
         status = "Imported \(incoming.count) note(s)."
     }
 }

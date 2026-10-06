@@ -21,7 +21,7 @@ import Foundation
         let container = try ModelContainer(for: Note.self, configurations: config)
         let repo = NotesRepository(context: ModelContext(container))
         repo.create(text: WelcomeNote.text(hotKeyDisplay: "⌃⌘N"))
-        repo.save()
+        try repo.save()
         let all = repo.allSortedByModified()
         #expect(all.count == 1)
         #expect(all.first.map { NoteTitle.title(from: $0.text) } == "Welcome to Popup Notes 👋")
