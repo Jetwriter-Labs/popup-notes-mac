@@ -50,10 +50,13 @@ struct OnboardingStripView: View {
     private var failureRow: some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle").accessibilityHidden(true)
-            Text("\(hotKey.combo.displayString) is unavailable — set a new one in Settings (⌘,)")
+            Text("\(hotKey.combo.displayString) is unavailable — another app may be using it")
+            Spacer()
+            SettingsButton()
         }
         .font(.callout)
         .foregroundStyle(.secondary)
+        .controlSize(.small)
     }
 
     private var loginRow: some View {

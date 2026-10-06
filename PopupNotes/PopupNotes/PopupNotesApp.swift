@@ -12,6 +12,12 @@ struct PopupNotesApp: App {
         Settings {
             SettingsView(container: appDelegate.container, appDelegate: appDelegate)
         }
+        .commands {
+            // ⌘, too must go through SettingsButton (see there for why).
+            CommandGroup(replacing: .appSettings) {
+                SettingsButton().keyboardShortcut(",", modifiers: .command)
+            }
+        }
     }
 }
 
@@ -26,7 +32,7 @@ private struct MenuBarMenu: View {
         Button("Show Notes") { appDelegate.showNotes() }
             .keyboardShortcut(hotKey.isRegistered ? hotKey.combo.swiftUIShortcut : nil)
         Divider()
-        SettingsLink { Text("Settings…") }
+        SettingsButton()
         Divider()
         Button("Quit Popup Notes") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")

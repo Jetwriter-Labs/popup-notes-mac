@@ -39,7 +39,7 @@ struct NotesListView: View {
                 Menu("Options", systemImage: "ellipsis.circle") {
                     Button("New Note", action: onNew) // ⌘N lives on the toolbar button
                     Divider()
-                    SettingsLink { Text("Settings…") }
+                    SettingsButton()
                     Divider()
                     Button("Quit Popup Notes") { NSApplication.shared.terminate(nil) }
                 }

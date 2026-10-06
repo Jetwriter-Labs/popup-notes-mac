@@ -8,9 +8,10 @@ extension AppLaunchKind {
     ///
     /// Only valid from inside that callback — `currentAppleEvent` is non-nil
     /// just while the event is being handled, and is still nil in
-    /// `applicationWillFinishLaunching`. No open event at all means nobody
-    /// asked the app to open (a bare `exec`, a debugger), so stay quiet and
-    /// treat it as a system launch.
+    /// `applicationWillFinishLaunching`. Even a bare `exec` or an Xcode Run
+    /// gets a synthesized, parameterless `oapp`, so those count as user
+    /// launches; if there is no open event at all, stay quiet and treat it
+    /// as a system launch.
     static var current: AppLaunchKind {
         guard let event = NSAppleEventManager.shared().currentAppleEvent,
               event.eventID == AEEventID(kAEOpenApplication) else { return .system }
