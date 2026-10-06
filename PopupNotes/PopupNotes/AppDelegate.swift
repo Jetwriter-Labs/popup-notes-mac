@@ -5,9 +5,9 @@ import PopupNotesCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let container: ModelContainer
-    private(set) var currentHotKey = HotKeyStore.saved
     private let hotKey = HotKeyManager()
     private let panel: PanelController
+    private var hotKeyStatus: HotKeyStatus { .shared }
 
     override init() {
         let base = try? FileManager.default.url(for: .applicationSupportDirectory,
@@ -31,9 +31,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let launchKind = AppLaunchKind.current
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         migrateLegacyIfNeeded()
-        let ok = hotKey.register(currentHotKey) { [weak self] in self?.handleHotKeyFire() }
-        OnboardingDefaults.hotKeyRegistered = ok
-        if !ok {
+        let combo = HotKeyStore.saved
+        hotKeyStatus.combo = combo
+        hotKeyStatus.isRegistered = hotKey.register(combo) { [weak self] in self?.handleHotKeyFire() }
+        if !hotKeyStatus.isRegistered {
             NSLog("PopupNotes: hotkey registration failed; use the menu-bar item.")
         }
         runFirstLaunchOnboardingIfNeeded()
@@ -49,16 +50,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// registration is healthy — after a failure it re-attempts, so
     /// re-recording the same shortcut can recover once a conflict clears.
     func applyHotKey(_ combo: HotKeyCombo) -> Bool {
-        guard combo != currentHotKey || !OnboardingDefaults.hotKeyRegistered else { return true }
+        guard combo != hotKeyStatus.combo || !hotKeyStatus.isRegistered else { return true }
         hotKey.unregister()
         if hotKey.register(combo, onFire: { [weak self] in self?.handleHotKeyFire() }) {
-            currentHotKey = combo
+            hotKeyStatus.combo = combo
+            hotKeyStatus.isRegistered = true
             HotKeyStore.saved = combo
-            OnboardingDefaults.hotKeyRegistered = true
             return true
         }
-        let restored = hotKey.register(currentHotKey) { [weak self] in self?.handleHotKeyFire() }
-        OnboardingDefaults.hotKeyRegistered = restored
+        let restored = hotKey.register(hotKeyStatus.combo) { [weak self] in self?.handleHotKeyFire() }
+        hotKeyStatus.isRegistered = restored
         if !restored {
             NSLog("PopupNotes: failed to restore the previous hotkey; use the menu-bar item.")
         }
@@ -92,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let repo = NotesRepository(context: container.mainContext)
         if repo.allSortedByModified().isEmpty {
-            repo.create(text: WelcomeNote.text(hotKeyDisplay: currentHotKey.displayString))
+            repo.create(text: WelcomeNote.text(hotKeyDisplay: hotKeyStatus.combo.displayString))
             try? repo.save()
         }
         panel.show()

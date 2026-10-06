@@ -1,32 +1,28 @@
 import SwiftUI
 import PopupNotesCore
 
-/// One-time first-run helpers pinned under the notes UI: a hotkey hint that
-/// retires itself after the first real hotkey use (or its X button), and the
+/// Helpers pinned under the notes UI: the first-run hotkey hint, which
+/// retires itself after the first real hotkey use (or its X button); the
 /// launch-at-login consent row — App Review 2.4.5(iii): explicit opt-in via
-/// the Enable button, never a silent default. Renders nothing once both rows
-/// have retired.
+/// the Enable button, never a silent default; and, whenever the shortcut
+/// couldn't be registered, a warning in the hint's place, since the panel
+/// then has to be opened from the menu bar. Renders nothing once all are retired.
 struct OnboardingStripView: View {
     @AppStorage(OnboardingDefaults.didUseHotkeyOnceKey) private var didUseHotkey = false
     @AppStorage(OnboardingDefaults.didDismissHotkeyHintKey) private var didDismissHint = false
     @AppStorage(OnboardingDefaults.didPromptLaunchAtLoginKey) private var didAnswerLogin = false
-    @AppStorage(OnboardingDefaults.hotKeyRegisteredKey) private var hotKeyRegistered = true
-    // Same defaults key HotKeyStore writes, so the hint live-updates when the
-    // user records a new shortcut in Settings.
-    @AppStorage("hotKeyCombo") private var comboData = Data()
+    // Observed, so the hint and warning follow a shortcut change at once.
+    private var hotKey: HotKeyStatus { .shared }
 
-    private var showHotkeyHint: Bool { !didUseHotkey && !didDismissHint }
-
-    private var comboDisplay: String {
-        ((try? JSONDecoder().decode(HotKeyCombo.self, from: comboData)) ?? .default).displayString
-    }
+    private var showFailure: Bool { !hotKey.isRegistered }
+    private var showHotkeyHint: Bool { hotKey.isRegistered && !didUseHotkey && !didDismissHint }
 
     var body: some View {
-        if showHotkeyHint || !didAnswerLogin {
+        if showFailure || showHotkeyHint || !didAnswerLogin {
             VStack(spacing: 0) {
                 Divider()
                 VStack(alignment: .leading, spacing: 6) {
-                    if showHotkeyHint { hotkeyRow }
+                    if showFailure { failureRow } else if showHotkeyHint { hotkeyRow }
                     if !didAnswerLogin { loginRow }
                 }
                 .padding(.horizontal, 12)
@@ -38,14 +34,23 @@ struct OnboardingStripView: View {
 
     private var hotkeyRow: some View {
         HStack(spacing: 6) {
-            Image(systemName: hotKeyRegistered ? "keyboard" : "exclamationmark.triangle")
-            Text(hotKeyRegistered
-                 ? "Press \(comboDisplay) in any app to open Popup Notes"
-                 : "Your shortcut is unavailable — set a new one in Settings (⌘,)")
+            Image(systemName: "keyboard").accessibilityHidden(true)
+            Text("Press \(hotKey.combo.displayString) in any app to open Popup Notes")
             Spacer()
             Button { didDismissHint = true } label: { Image(systemName: "xmark") }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Dismiss shortcut hint")
+                .help("Dismiss")
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    }
+
+    /// No dismiss button: it goes away by itself once a working shortcut is set.
+    private var failureRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle").accessibilityHidden(true)
+            Text("\(hotKey.combo.displayString) is unavailable — set a new one in Settings (⌘,)")
         }
         .font(.callout)
         .foregroundStyle(.secondary)
@@ -53,7 +58,7 @@ struct OnboardingStripView: View {
 
     private var loginRow: some View {
         HStack(spacing: 6) {
-            Image(systemName: "power")
+            Image(systemName: "power").accessibilityHidden(true)
             Text("Start at login so your shortcut is ready after a restart")
             Spacer()
             Button("Enable") {

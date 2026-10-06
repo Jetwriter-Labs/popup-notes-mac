@@ -1,35 +1,51 @@
 import SwiftUI
 import AppKit
+import Accessibility
 import PopupNotesCore
 
 /// Click-to-record control for the global shortcut. While recording, a local
-/// key monitor captures the next keystroke; Esc cancels. Combos must include
-/// ⌘ or ⌃ (Option-only combos are broken with `RegisterEventHotKey` on
-/// macOS 15+, see `HotKeyCombo.isValidGlobalHotKey`).
+/// key monitor captures the next keystroke typed in this window; Esc cancels.
+/// Combos must include ⌘ or ⌃ (Option-only combos are broken with
+/// `RegisterEventHotKey` on macOS 15+, see `HotKeyCombo.isValidGlobalHotKey`),
+/// and ⌘ alone is refused because it would take that shortcut from every app.
 struct HotKeyRecorderView: View {
     /// Applies the combo (re-registering the Carbon hotkey); false = rejected.
     let apply: (HotKeyCombo) -> Bool
 
-    @State private var combo: HotKeyCombo = HotKeyStore.saved
     @State private var isRecording = false
     @State private var monitor: Any?
     @State private var feedback: String?
+    private var hotKey: HotKeyStatus { .shared }
+
+    private var message: String? {
+        feedback ?? (hotKey.isRegistered ? nil
+            : "This shortcut isn't active — another app may be using it. Record a different one.")
+    }
 
     var body: some View {
         LabeledContent("Open notes") {
             HStack(spacing: 8) {
-                Button(isRecording ? "Type new shortcut (⎋ cancels)" : combo.displayString) {
+                Button(isRecording ? "Type new shortcut (⎋ cancels)" : hotKey.combo.displayString) {
                     isRecording ? stopRecording() : startRecording()
                 }
-                if combo != .default && !isRecording {
+                if hotKey.combo != .default && !isRecording {
                     Button("Reset to \(HotKeyCombo.default.displayString)") {
                         commit(.default)
                     }
                 }
             }
         }
-        if let feedback {
-            Text(feedback)
+        // Whatever takes the keyboard away from Settings ends the recording:
+        // closing the window, another tab, the hotkey showing the notes panel.
+        .onDisappear(perform: stopRecording)
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            if isRecording { stopRecording() }
+        }
+        .onChange(of: feedback) { _, new in
+            if let new { AccessibilityNotification.Announcement(new).post() }
+        }
+        if let message {
+            Text(message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -38,7 +54,18 @@ struct HotKeyRecorderView: View {
     private func startRecording() {
         feedback = nil
         isRecording = true
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        // A local monitor sees keystrokes for EVERY window of the app, the
+        // notes panel included. Only keys typed in the recorder's own window
+        // (key, since its button was just clicked) are a recording; anything
+        // else ends the recording and goes through untouched — otherwise
+        // typing in a note would vanish, and ⌘V there would become the
+        // system-wide hotkey. A nil window never matches.
+        let recorderWindow = NSApp.keyWindow
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak recorderWindow] event in
+            guard let recorderWindow, event.window === recorderWindow else {
+                stopRecording()
+                return event
+            }
             handle(event)
             return nil // swallow keystrokes while recording
         }
@@ -50,9 +77,13 @@ struct HotKeyRecorderView: View {
     }
 
     private func handle(_ event: NSEvent) {
-        if event.keyCode == 53 { stopRecording(); return } // Esc cancels
+        if event.keyCode == 53 { feedback = nil; stopRecording(); return } // Esc cancels
         let candidate = HotKeyCombo(keyCode: UInt32(event.keyCode),
                                     modifiers: KeyModifiers(event.modifierFlags))
+        guard !candidate.usesCommandAlone else {
+            feedback = "\(candidate.displayString) would stop working in every other app. Add ⌃, ⌥ or ⇧."
+            return
+        }
         guard candidate.isValidGlobalHotKey else {
             feedback = "Include ⌘ or ⌃ in the shortcut."
             return
@@ -63,7 +94,6 @@ struct HotKeyRecorderView: View {
 
     private func commit(_ candidate: HotKeyCombo) {
         if apply(candidate) {
-            combo = candidate
             feedback = nil
         } else {
             feedback = "That shortcut couldn't be registered — it may be taken. Try another."
