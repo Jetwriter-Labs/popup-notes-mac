@@ -73,7 +73,8 @@ Original architecture & scope rationale:
 - **SwiftData** (`@Model`, SQLite-backed) for the notes database — first-party,
   so still zero third-party deps. Pure logic + the SwiftData repository live in
   the **`PopupNotesCore`** SwiftPM package; run its tests with
-  `./scripts/test-core.sh` (works on Command Line Tools or full Xcode).
+  `./scripts/test-core.sh` (needs full Xcode — SwiftData's `@Model` macro
+  plugin doesn't ship with the Command Line Tools).
 - **`SMAppService.mainApp`** for launch-at-login (consent via the onboarding
   strip's Enable button — App Review 2.4.5(iii) forbids silent enabling).
 - **Swift Testing** (`import Testing`) for tests.
@@ -86,14 +87,15 @@ Original architecture & scope rationale:
 | Unit | Responsibility |
 |---|---|
 | `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra` + the `Settings` scene; bridges to `AppDelegate`. |
-| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer`; runs one-time legacy migration + first-launch onboarding (seed Welcome note, auto-show panel, reconcile pre-consent login default); wires hotkey → panel and records registration status; opens the panel on a user launch and on reopen (Spotlight/Raycast/Finder); saves on quit. |
+| `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer` (if the store won't open: an explanatory alert and quit, file untouched — never a crash loop); runs one-time legacy migration + first-launch onboarding (seed Welcome note, reconcile pre-consent login default); wires hotkey → panel and publishes its state in `HotKeyStatus`; opens the panel on a user launch and on reopen (Spotlight/Raycast/Finder), prewarms it after a login launch; saves on quit. |
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
-| `PanelController` | Owns panel lifecycle: build, host `NotesView` (injecting the container), frame-remember, show/hide/`activate`, click-outside monitor, Esc. |
+| `HotKeyStatus` · `HotKeyStore` | In-memory `@Observable` live hotkey state (combo + registered), observed by the menu bar, strip and Settings; `HotKeyStore` persists the combo in `UserDefaults`. |
+| `PanelController` | Owns panel lifecycle: build (or prewarm offscreen), host `NotesView` (injecting the container), frame-remember + follow the mouse's display, show/hide/`activate`/toggle (re-keys an unfocused panel), editor focus on show, click-outside monitor, Esc/⌘W, ⌘H recovery, gets out of the way of Settings. |
 | `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |
-| `NotesView` · `NotesListView` · `NoteDetailView` | SwiftUI master-detail: `@Query` sidebar (title + date, new/delete-with-confirm) + the selected note's `TextEditor`. |
+| `NotesView` · `NotesListView` · `NoteDetailView` · `NoteTextEditor` | SwiftUI master-detail: `@Query` sidebar (title, then `date · preview`; ⌘N stays in an open blank note; delete via context menu or ⌫ in the list — confirmed unless blank — then the neighbor is selected; blank notes are discarded once you leave them) + the selected note's `NSTextView`-backed editor (own undo history per note). |
 | `OnboardingStripView` · `OnboardingDefaults` | Self-retiring bottom strip: hotkey hint (until first hotkey use or dismissal; failure variant when registration fails) + launch-at-login Enable/Not Now consent; one-time `UserDefaults` flags. |
-| `SettingsView` · `HotKeyRecorderView` | `Settings` scene, two tabs — General: launch-at-login toggle, global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. |
-| `Note` (`@Model`) · `NotesRepository` | SwiftData model (id, text, created, modified; first-line `title`) + CRUD (create/delete/sort/upsert). In `PopupNotesCore`. |
+| `SettingsView` · `HotKeyRecorderView` · `SettingsButton` | `Settings` scene, two tabs — General: launch-at-login toggle (shows the real `SMAppService` status, "Open Login Items…" when approval is needed), global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. `SettingsButton` is the one "Settings…" path (panel ⋯ menu, strip, menu bar, ⌘,): it hides the floating panel and activates the app first. |
+| `Note` (`@Model`) · `NotesRepository` · `NoteSelection` | SwiftData model (id, text, created, modified; first-line `title`, `preview`, `isBlank`, `isAlive`) + CRUD and newer-wins `importNotes` (one fetch, throws rather than treating a failed fetch as empty); neighbor-on-delete rule. In `PopupNotesCore`. |
 | `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content. In `PopupNotesCore`. |
 | `AppLaunchKind` · `LaunchEvent` | Tells a user launch from a login/Services launch via the `kAEOpenApplication` event's `keyAELaunchedAsLogInItem`/`…ServiceItem` markers, so the panel opens for the former and stays hidden for the latter. Classifier in `PopupNotesCore`; Carbon event reader in the app. |
 
@@ -147,11 +149,11 @@ top still governs anything they suggest.
 # Build
 xcodebuild -scheme PopupNotes -configuration Debug build
 
-# Test
-xcodebuild -scheme PopupNotes -destination 'platform=macOS' test
+# Test (the PopupNotesCore package holds all unit tests; the app target has none)
+./scripts/test-core.sh
 ```
 
-Or open `PopupNotes.xcodeproj` in Xcode and Run (⌘R) / Test (⌘U).
+Or open `PopupNotes.xcodeproj` in Xcode and Run (⌘R).
 
 Manual smoke test: reset state (`defaults delete ai.jetwriter.popupnotes`;
 for a true fresh install also quit the app and delete

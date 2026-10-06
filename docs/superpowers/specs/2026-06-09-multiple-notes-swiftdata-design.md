@@ -208,3 +208,30 @@ The single-note `NoteStore` / `NoteFile` / `Debouncing` / `ScratchpadView` are
   plan). Data lives in the app container
   (`~/Library/Containers/com.gorvgoyl.PopupNotes/…/PopupNotes/Notes.store`),
   not a user-visible folder; JSON export/import is the portability path.
+
+## Amendments — 2026-10-06 quality audit
+
+These supersede the matching rows above.
+
+- **Import keeps newer local edits.** For an id that already exists here, the
+  file's copy replaces the local one only when its `modified` is at least as
+  new, compared at one-second precision (export writes whole-second ISO-8601;
+  a tie goes to the file). Identical text is left untouched; a duplicate id in
+  one file uses its last entry. The whole import is one fetch plus a
+  dictionary (was a full fetch per note), and it aborts — reporting why —
+  if the store can't be read, rather than treating that as "no notes". The
+  result is reported as added / updated / already up to date / kept (newer
+  here); kept notes come with how to force the file's version (delete the
+  note here, import again).
+- **Export** is refused if the store can't be read (it would otherwise write
+  `[]` over a good backup), writes atomically, and defaults to
+  `Popup Notes Export YYYY-MM-DD.json` (local date).
+- **Delete** selects the neighboring note (the one that slides into the row,
+  else the one above); deleting the last note creates a fresh one. ⌫ / ⌦ with
+  the list focused asks too; the dialog names the note; a blank note is
+  deleted without asking.
+- **Blank notes are discarded** when you move to another note (Apple Notes
+  behavior), and ⌘N on an open blank note stays in it instead of stacking
+  another empty note.
+- **Sidebar rows** show `date · preview` (the first line after the title) and
+  refresh their relative date every minute.

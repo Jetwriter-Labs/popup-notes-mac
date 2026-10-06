@@ -176,3 +176,23 @@ hint flags) → export/import and Esc/click-outside behavior unchanged.
 ## 11. Open questions
 
 None — all decisions locked in §2.
+
+## Amendments — 2026-10-06 quality audit
+
+These supersede the matching rows above.
+
+- **Auto-show only on a user launch.** `runFirstLaunchOnboardingIfNeeded()`
+  no longer shows the panel itself; `applicationDidFinishLaunching` shows it
+  for a user launch (Finder, Spotlight, Raycast, `open`). A first launch at
+  login — an upgrade installed while the old version ran — stays silent like
+  every other login launch. The Welcome note is still seeded, but only when
+  the store fetch succeeds and is empty.
+- **`hotKeyRegistered` is no longer a defaults key.** The live registration
+  state (and the current combo) lives in memory in `HotKeyStatus`, observed by
+  the strip, Settings and the menu-bar menu. A second running copy (a dev
+  build beside the installed one) shares the defaults domain and used to
+  mislabel the working copy.
+- **The failure variant shows whenever registration failed**, not only while
+  the hint is unretired, has no dismiss X (it retires itself once a working
+  shortcut is recorded), and carries a **Settings…** button instead of
+  relying on ⌘,.

@@ -39,7 +39,7 @@ xcodebuild -project PopupNotes/PopupNotes.xcodeproj -scheme PopupNotes build
 | Path | What |
 |---|---|
 | `PopupNotes/` | The app: menu bar shell, floating panel, hotkey, Settings. |
-| [`PopupNotesCore/`](PopupNotesCore/) | SwiftPM package — pure logic (notes model, repository, JSON codec, hotkey combo). Tested without Xcode: `./scripts/test-core.sh` |
+| [`PopupNotesCore/`](PopupNotesCore/) | SwiftPM package — pure logic (notes model, repository, JSON codec, hotkey combo). Tests: `./scripts/test-core.sh` |
 | [`scripts/release.sh`](scripts/release.sh) | Build → sign → notarize → DMG. |
 | [`docs/`](docs/) | Design specs and the release guide. |
 
