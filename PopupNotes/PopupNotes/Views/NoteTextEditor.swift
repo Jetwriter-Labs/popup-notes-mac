@@ -11,6 +11,11 @@ import AppKit
 /// selection, not just first launch.
 struct NoteTextEditor: NSViewRepresentable {
     @Binding var text: String
+    /// Changing it puts keyboard focus in the editor (caret kept) — for when
+    /// no new editor is created to take focus itself.
+    var focusRequest = 0
+    /// False when the user is working in the sidebar and must keep its focus.
+    var takesFocusOnAppear = true
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = NSTextView()
@@ -46,9 +51,11 @@ struct NoteTextEditor: NSViewRepresentable {
         // Caret at end, focused, once the view is in a window.
         let end = NSRange(location: (text as NSString).length, length: 0)
         textView.setSelectedRange(end)
-        Task { @MainActor in
-            textView.window?.makeFirstResponder(textView)
-            textView.scrollRangeToVisible(end)
+        if takesFocusOnAppear {
+            Task { @MainActor in
+                textView.window?.makeFirstResponder(textView)
+                textView.scrollRangeToVisible(end)
+            }
         }
         return scrollView
     }
@@ -56,20 +63,40 @@ struct NoteTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         // Only overwrite when the model genuinely diverged (e.g. import), so we
-        // never clobber the user's caret/selection while they type.
-        if textView.string != text { textView.string = text }
+        // never clobber the user's caret/selection while they type. That
+        // replacement isn't undoable, and the earlier undo entries now point
+        // at ranges that may not exist (⌘Z would throw), so drop them.
+        if textView.string != text {
+            textView.string = text
+            context.coordinator.undoManager.removeAllActions()
+        }
+        if focusRequest != context.coordinator.focusRequest {
+            context.coordinator.focusRequest = focusRequest
+            Task { @MainActor in textView.window?.makeFirstResponder(textView) }
+        }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, focusRequest: focusRequest) }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         private let text: Binding<String>
-        init(text: Binding<String>) { self.text = text }
+        var focusRequest: Int
+        /// This editor's own undo history. Without it every editor shares the
+        /// panel window's undo manager, so ⌘Z could reach into the history of
+        /// notes viewed earlier.
+        let undoManager = UndoManager()
+
+        init(text: Binding<String>, focusRequest: Int) {
+            self.text = text
+            self.focusRequest = focusRequest
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
         }
+
+        func undoManager(for view: NSTextView) -> UndoManager? { undoManager }
     }
 }
 
