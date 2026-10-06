@@ -15,6 +15,10 @@ final class PanelController {
     private var panel: FloatingPanel?
     private var clickMonitor: Any?
     private weak var previousApp: NSRunningApplication?
+    /// The most recent app other than this one to become active — where Esc
+    /// should return the user when this app itself is frontmost at show time
+    /// (Spotlight, Raycast or Finder reopening it activates it).
+    private weak var lastOtherApp: NSRunningApplication?
     /// True from "make the panel key" until it actually becomes key. AppKit
     /// may grant key a beat later, or not at all while an app-modal session
     /// (an open/save panel) runs — toggle() must not mistake that for a panel
@@ -33,6 +37,15 @@ final class PanelController {
         _ = center.addObserver(forName: .popupNotesWillOpenSettings, object: nil, queue: nil) { [weak self] _ in
             MainActor.assumeIsolated { self?.hideForSettings() }
         }
+        if let front = NSWorkspace.shared.frontmostApplication, !Self.isSelf(front) { lastOtherApp = front }
+        _ = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            MainActor.assumeIsolated {
+                if let app, !Self.isSelf(app) { self?.lastOtherApp = app }
+            }
+        }
     }
 
     var isVisible: Bool { panel?.isVisible ?? false }
@@ -46,7 +59,7 @@ final class PanelController {
         } else {
             // The hotkey never activates this app, so the frontmost app is
             // where the user is now — that's where Esc should return them.
-            previousApp = NSWorkspace.shared.frontmostApplication
+            previousApp = handOffTarget(excluding: panel)
             makeKey(panel)
         }
     }
@@ -69,7 +82,7 @@ final class PanelController {
         guard !isVisible else { return }
         let panel = panel ?? makePanel()
         self.panel = panel
-        previousApp = NSWorkspace.shared.frontmostApplication
+        previousApp = handOffTarget(excluding: panel)
         restoreFrameOnFirstShow(panel)
         moveToMouseScreenIfNeeded(panel)
         // Ordering a window front would unhide a hidden app (after ⌘H) AND
@@ -108,6 +121,24 @@ final class PanelController {
     }
 
     // MARK: - Focus
+
+    /// Where Esc returns the user: the frontmost app — unless that's this app
+    /// with nothing else of ours on screen (it was just reopened from
+    /// Spotlight, Raycast or Finder), in which case "returning" to ourselves
+    /// would leave keystrokes going nowhere; use the last other active app.
+    /// With Settings open, returning to it is right, so self is kept then.
+    private func handOffTarget(excluding panel: FloatingPanel) -> NSRunningApplication? {
+        let front = NSWorkspace.shared.frontmostApplication
+        guard let front, Self.isSelf(front) else { return front }
+        let ownWindowShown = NSApp.windows.contains {
+            $0 !== panel && $0.isVisible && $0.styleMask.contains(.titled)
+        }
+        return ownWindowShown ? front : lastOtherApp
+    }
+
+    private static func isSelf(_ app: NSRunningApplication) -> Bool {
+        app.processIdentifier == ProcessInfo.processInfo.processIdentifier
+    }
 
     private func makeKey(_ panel: FloatingPanel) {
         awaitingKey = !panel.isKeyWindow // becomeKey clears it, possibly within the next call
