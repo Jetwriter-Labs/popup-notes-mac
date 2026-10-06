@@ -24,6 +24,13 @@ SCHEME=PopupNotes
 PRODUCT="Popup Notes"   # PRODUCT_NAME — the .app bundle is "Popup Notes.app"
 ARCHIVE=build/PopupNotes.xcarchive
 
+echo "▸ Running PopupNotesCore tests…"
+if ! test_log=$(./scripts/test-core.sh 2>&1); then
+    print -r -- "$test_log" | tail -40
+    echo "✘ Core tests failed — not releasing."
+    exit 1
+fi
+
 echo "▸ Archiving $SCHEME (Release)…"
 xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
     archive -archivePath "$ARCHIVE" -allowProvisioningUpdates -quiet
