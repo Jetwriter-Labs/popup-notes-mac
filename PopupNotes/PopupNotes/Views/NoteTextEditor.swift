@@ -1,14 +1,16 @@
 import SwiftUI
 import AppKit
+import PopupNotesCore
 
-/// A lightweight `NSTextView`-backed plain-text editor.
+/// A lightweight `NSTextView`-backed editor for a note's Markdown.
 ///
 /// SwiftUI's `TextEditor` has a fixed internal inset we can't tighten; wrapping
 /// `NSTextView` lets us set a small `textContainerInset` (so text starts right
 /// under the toolbar) and place the caret at the end with focus when a note is
 /// shown. The detail view is re-created per selection (`.id(note.id)`), so
 /// `makeNSView` runs once per note — caret-at-end therefore applies on each
-/// selection, not just first launch.
+/// selection, not just first launch. The text view styles the Markdown as
+/// it's typed (see `MarkdownTextView`) and keeps `outline` current.
 struct NoteTextEditor: NSViewRepresentable {
     @Binding var text: String
     /// Changing it puts keyboard focus in the editor (caret kept) — for when
@@ -16,13 +18,16 @@ struct NoteTextEditor: NSViewRepresentable {
     var focusRequest = 0
     /// False when the user is working in the sidebar and must keep its focus.
     var takesFocusOnAppear = true
+    /// Kept up to date with the note's headings; its jumps scroll this editor.
+    var outline: NoteOutline?
 
     func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView()
+        let textView = MarkdownTextView.make()
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
         textView.font = .preferredFont(forTextStyle: .body)
+        textView.typingAttributes = textView.styler.theme.baseAttributes
         textView.drawsBackground = false
         textView.textContainerInset = NSSize(width: 8, height: 6) // tight top/leading padding
         textView.isVerticallyResizable = true
@@ -32,7 +37,6 @@ struct NoteTextEditor: NSViewRepresentable {
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        textView.string = text
 
         let scrollView = NSScrollView()
         scrollView.documentView = textView
@@ -47,6 +51,9 @@ struct NoteTextEditor: NSViewRepresentable {
         // double-counting the toolbar height as a large top gap.
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets()
+
+        context.coordinator.attach(textView, in: scrollView, outline: outline)
+        textView.string = text // styled as it goes in
 
         // Caret at end, focused, once the view is in a window.
         let end = NSRange(location: (text as NSString).length, length: 0)
@@ -85,10 +92,30 @@ struct NoteTextEditor: NSViewRepresentable {
         /// panel window's undo manager, so ⌘Z could reach into the history of
         /// notes viewed earlier.
         let undoManager = UndoManager()
+        private weak var textView: MarkdownTextView?
+        private var outline: NoteOutline?
+        private var outlineUpdateScheduled = false
 
         init(text: Binding<String>, focusRequest: Int) {
             self.text = text
             self.focusRequest = focusRequest
+        }
+
+        func attach(_ textView: MarkdownTextView, in scrollView: NSScrollView, outline: NoteOutline?) {
+            self.textView = textView
+            self.outline = outline
+            textView.styler.didRestyle = { [weak self, weak textView] decorationsChanged in
+                // Code blocks, quotes and rules are drawn behind the text,
+                // outside the lines TextKit redraws for an edit.
+                if decorationsChanged { textView?.needsDisplay = true }
+                self?.scheduleOutlineUpdate()
+            }
+            guard let outline else { return }
+            outline.revealHeading = { [weak textView] heading in textView?.reveal(heading.range) }
+            scrollView.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(editorDidScroll),
+                                                   name: NSView.boundsDidChangeNotification,
+                                                   object: scrollView.contentView)
         }
 
         func textDidChange(_ notification: Notification) {
@@ -96,7 +123,47 @@ struct NoteTextEditor: NSViewRepresentable {
             text.wrappedValue = textView.string
         }
 
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView else { return }
+            // NSTextView types with the attributes of the text before the
+            // caret — a heading's, on the empty line under it. The styler
+            // restyles whatever is typed anyway; this keeps the caret sized
+            // for body text.
+            textView.typingAttributes = textView.styler.theme.baseAttributes
+            updateCurrentSection()
+        }
+
         func undoManager(for view: NSTextView) -> UndoManager? { undoManager }
+
+        @objc private func editorDidScroll(_ notification: Notification) {
+            updateCurrentSection()
+        }
+
+        /// Once per batch of edits, after the text storage has settled
+        /// (the restyle runs mid-edit, too early to ask for layout).
+        private func scheduleOutlineUpdate() {
+            guard outline != nil, !outlineUpdateScheduled else { return }
+            outlineUpdateScheduled = true
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                outlineUpdateScheduled = false
+                guard let textView, let outline else { return }
+                outline.update(headings: MarkdownOutline.headings(in: textView.styler.lines, of: textView.styler.text))
+                updateCurrentSection()
+            }
+        }
+
+        /// The section around the caret — or, with the caret scrolled out of
+        /// view, the one at the top of the editor.
+        private func updateCurrentSection() {
+            guard let textView, let outline else { return }
+            guard !outline.headings.isEmpty else { outline.update(current: nil); return }
+            let visible = textView.visibleCharacterRange()
+            let caret = textView.selectedRange().location
+            let caretIsVisible = caret >= visible.location && caret <= NSMaxRange(visible)
+            let location = caretIsVisible ? caret : visible.location
+            outline.update(current: MarkdownOutline.section(containing: location, in: outline.headings))
+        }
     }
 }
 

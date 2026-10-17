@@ -45,11 +45,17 @@ final class FloatingPanel: NSPanel {
     /// ⌘W dismisses, like Esc. Handled here because the panel isn't
     /// `.closable`, so the menu's Close item is disabled for it. Only plain
     /// ⌘W (Caps Lock aside) — ⇧⌘W, ⌥⌘W and the rest go on as usual.
+    /// ⌃⌘O shows or hides the outline: the Options menu lists that
+    /// shortcut, but a toolbar menu's shortcuts only work while it's open.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if event.type == .keyDown, modifiers == .command,
-           event.charactersIgnoringModifiers?.lowercased() == "w" {
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if event.type == .keyDown, modifiers == .command, key == "w" {
             onCancel?()
+            return true
+        }
+        if event.type == .keyDown, modifiers == [.command, .control], key == "o" {
+            NoteOutline.isShown.toggle()
             return true
         }
         return super.performKeyEquivalent(with: event)

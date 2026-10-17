@@ -3,9 +3,9 @@ import AppKit
 import PopupNotesCore
 
 /// Sidebar: the list of notes (title, then date · preview), a New Note button,
-/// and an options menu (New Note, Settings, Quit). Delete — from the context
-/// menu, VoiceOver's actions, or ⌫ with the list focused — asks first unless
-/// the note is blank.
+/// and an options menu (New Note, Show Outline, Settings, Quit). Delete — from
+/// the context menu, VoiceOver's actions, or ⌫ with the list focused — asks
+/// first unless the note is blank.
 struct NotesListView: View {
     let notes: [Note]
     @Binding var selection: UUID?
@@ -15,6 +15,7 @@ struct NotesListView: View {
 
     /// A snapshot, not the model: the dialog's title must not track live edits.
     @State private var pendingDelete: PendingDelete?
+    @AppStorage(NoteOutline.showsOutlineKey) private var showsOutline = true
 
     var body: some View {
         List(selection: $selection) {
@@ -38,6 +39,8 @@ struct NotesListView: View {
             ToolbarItem {
                 Menu("Options", systemImage: "ellipsis.circle") {
                     Button("New Note", action: onNew) // ⌘N lives on the toolbar button
+                    Toggle("Show Outline", isOn: $showsOutline)
+                        .keyboardShortcut("o", modifiers: [.command, .control])
                     Divider()
                     SettingsButton()
                     Divider()
