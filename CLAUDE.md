@@ -47,7 +47,9 @@ up first.
   Settings recorder) registered via Carbon `RegisterEventHotKey`.
 - **UI:** a non-activating, floating, **resizable** `NSPanel` hosting a SwiftUI
   `NavigationSplitView` — a sidebar list of notes beside the selected note's
-  `TextEditor` — overlaid over the current app without stealing it away.
+  editor — overlaid over the current app without stealing it away. Notes are
+  **Markdown, styled live** as you type (our own parser, no dependency), and a
+  note with headings gets a **sticky outline** pane beside the editor.
 - **Model:** **multiple notes** in a local **SwiftData** database (SQLite under
   the hood). Each note's **title is its first line**. A **Settings** window
   offers launch-at-login and JSON export/import.
@@ -56,6 +58,8 @@ up first.
 Current design (multiple notes + SwiftData + Settings — **supersedes the
 single-note model**):
 [`docs/superpowers/specs/2026-06-09-multiple-notes-swiftdata-design.md`](docs/superpowers/specs/2026-06-09-multiple-notes-swiftdata-design.md).
+Markdown editing + outline (supersedes that spec's "no Markdown" non-goal):
+[`docs/superpowers/specs/2026-10-17-markdown-outline-design.md`](docs/superpowers/specs/2026-10-17-markdown-outline-design.md).
 Original architecture & scope rationale:
 [`docs/superpowers/specs/2026-06-09-popup-notes-architecture-design.md`](docs/superpowers/specs/2026-06-09-popup-notes-architecture-design.md).
 
@@ -91,12 +95,15 @@ Original architecture & scope rationale:
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
 | `HotKeyStatus` · `HotKeyStore` | In-memory `@Observable` live hotkey state (combo + registered), observed by the menu bar, strip and Settings; `HotKeyStore` persists the combo in `UserDefaults`. |
 | `PanelController` | Owns panel lifecycle: build (or prewarm offscreen), host `NotesView` (injecting the container), frame-remember + follow the mouse's display, show/hide/`activate`/toggle (re-keys an unfocused panel), editor focus on show, click-outside monitor, Esc/⌘W, ⌘H recovery, gets out of the way of Settings. |
-| `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux. |
-| `NotesView` · `NotesListView` · `NoteDetailView` · `NoteTextEditor` | SwiftUI master-detail: `@Query` sidebar (title, then `date · preview`; ⌘N stays in an open blank note; delete via context menu or ⌫ in the list — confirmed unless blank — then the neighbor is selected; blank notes are discarded once you leave them) + the selected note's `NSTextView`-backed editor (own undo history per note). |
+| `FloatingPanel` | `NSPanel` subclass: non-activating, floating, **resizable** (frame remembered), becomes key for typing, all-Spaces + full-screen-aux; handles ⌘W and ⌃⌘O (outline) itself. |
+| `NotesView` · `NotesListView` · `NoteDetailView` · `NoteTextEditor` | SwiftUI master-detail: `@Query` sidebar (title, then `date · preview`; ⌘N stays in an open blank note; delete via context menu or ⌫ in the list — confirmed unless blank — then the neighbor is selected; blank notes are discarded once you leave them) + the selected note's `NSTextView`-backed editor (own undo history per note) and, beside it, its outline. |
+| `MarkdownTextView` · `MarkdownStyler` · `MarkdownTheme` | The editor (`Editor/`): a TextKit 2 `NSTextView` whose text stays plain Markdown. The styler (text-storage delegate, `didProcessEditing` — never `willProcessEditing`, which misplaces the caret) restyles only the lines an edit changed; the view draws code-block/quote/rule backgrounds, continues lists on Return, nests with Tab/Shift-Tab, toggles ⌘B/⌘I (each its own undo step), checks task boxes on click, and scrolls to a heading. Never touch its `layoutManager` (falls back to TextKit 1). |
+| `NoteOutline` · `NoteOutlineView` | The sticky outline: `@Observable` headings + current section (caret's, or the top line's when the caret is off screen), kept current by the editor's coordinator; the pane lists them, highlights the current one, jumps on click. Shown with ≥ 2 headings while "Show Outline" (⋯ menu, ⌃⌘O, `showsOutline` default) is on and the detail is ≥ 420 pt wide. |
 | `OnboardingStripView` · `OnboardingDefaults` | Self-retiring bottom strip: hotkey hint (until first hotkey use or dismissal; failure variant when registration fails) + launch-at-login Enable/Not Now consent; one-time `UserDefaults` flags. |
 | `SettingsView` · `HotKeyRecorderView` · `SettingsButton` | `Settings` scene, two tabs — General: launch-at-login toggle (shows the real `SMAppService` status, "Open Login Items…" when approval is needed), global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. `SettingsButton` is the one "Settings…" path (panel ⋯ menu, strip, menu bar, ⌘,): it hides the floating panel and activates the app first. |
-| `Note` (`@Model`) · `NotesRepository` · `NoteSelection` | SwiftData model (id, text, created, modified; first-line `title`, `preview`, `isBlank`, `isAlive`) + CRUD and newer-wins `importNotes` (one fetch, throws rather than treating a failed fetch as empty); neighbor-on-delete rule. In `PopupNotesCore`. |
-| `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content. In `PopupNotesCore`. |
+| `Note` (`@Model`) · `NotesRepository` · `NoteSelection` | SwiftData model (id, text, created, modified; first-line `title` and `preview` read without Markdown syntax, `isBlank`, `isAlive`) + CRUD and newer-wins `importNotes` (one fetch, throws rather than treating a failed fetch as empty); neighbor-on-delete rule. In `PopupNotesCore`. |
+| `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content (Markdown, so its headings fill the outline). In `PopupNotesCore`. |
+| `MarkdownBlocks` · `MarkdownInline` · `MarkdownOutline` · `MarkdownEditing` | Dependency-free Markdown in UTF-16 `NSRange`s: line kinds (headings, lists, tasks, quotes, fences, rules), inline spans (CommonMark emphasis rules, code, links, bare URLs), the heading outline, and pure edits for Return/Tab/⌘B/⌘I/tasks. In `PopupNotesCore`. |
 | `AppLaunchKind` · `LaunchEvent` | Tells a user launch from a login/Services launch via the `kAEOpenApplication` event's `keyAELaunchedAsLogInItem`/`…ServiceItem` markers, so the panel opens for the former and stays hidden for the latter. Classifier in `PopupNotesCore`; Carbon event reader in the app. |
 
 ## Conventions & principles
@@ -164,7 +171,14 @@ row). Press **⌃⌘N**: the panel toggles and the hint row is gone for good.
 Click **Enable**: the app appears in System Settings ▸ General ▸ Login
 Items and the consent row disappears. Create a note (**⌘N**), type a first
 line (it becomes the sidebar title), switch notes, press **Esc**; reopen
-and confirm persistence. Relaunch: the panel opens (a user launch is a
+and confirm persistence. Markdown: type `# Title` (the sidebar shows
+"Title"), `**bold**`, `` `code` ``, a fenced block; in `- item` press Return
+(the list continues), Tab (it nests), Return on the empty item (it ends);
+select a word and ⌘B, then ⌘Z (only the bold goes); click a `- [ ]` box.
+Outline: the Welcome note shows it; a new note gets it at its second
+heading; the highlight follows the caret, and the top of the note while
+scrolling with the caret off screen; clicking a heading brings it to the
+top; ⌃⌘O and the pane's button hide it; a narrow panel drops it. Relaunch: the panel opens (a user launch is a
 request to see the notes) but the strip is gone. Press **Esc**, then open
 "Popup Notes" from Spotlight or Raycast *while it is still running* — the
 panel must come back; that reopen path once did nothing at all. With

@@ -14,6 +14,13 @@ without breaking flow — no Dock icon, no window juggling, no cloud.
   without deactivating it, and focus returns the moment you dismiss.
 - **Multiple notes** — a sidebar lists every note, titled by its first line.
   `⌘N` for a new one.
+- **Markdown, styled as you type** — headings, **bold**, *italic*, `code`,
+  links, bullet / numbered / task lists, quotes and code blocks. Lists carry
+  on when you press Return, Tab nests them, `⌘B` / `⌘I` work, and a click
+  checks off a task. Notes stay plain Markdown text.
+- **Sticky outline** — a note with headings gets a table of contents beside
+  it that stays put while you scroll, shows where you are, and jumps to a
+  heading on click. `⌃⌘O` shows or hides it.
 - **Fully local & private** — notes live in a SwiftData (SQLite) database on
   your Mac. No analytics, no tracking, no account, no network. JSON
   export/import is your backup and portability path.
@@ -39,7 +46,7 @@ xcodebuild -project PopupNotes/PopupNotes.xcodeproj -scheme PopupNotes build
 | Path | What |
 |---|---|
 | `PopupNotes/` | The app: menu bar shell, floating panel, hotkey, Settings. |
-| [`PopupNotesCore/`](PopupNotesCore/) | SwiftPM package — pure logic (notes model, repository, JSON codec, hotkey combo). Tests: `./scripts/test-core.sh` |
+| [`PopupNotesCore/`](PopupNotesCore/) | SwiftPM package — pure logic (notes model, repository, JSON codec, hotkey combo, Markdown parser). Tests: `./scripts/test-core.sh` |
 | [`scripts/release.sh`](scripts/release.sh) | Build → sign → notarize → DMG. |
 | [`docs/`](docs/) | Design specs and the release guide. |
 
