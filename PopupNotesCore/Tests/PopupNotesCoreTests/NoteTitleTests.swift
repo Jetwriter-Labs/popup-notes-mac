@@ -40,6 +40,32 @@ import Testing
         #expect(NoteTitle.title(from: text) == "Shopping")
     }
 
+    // MARK: Markdown
+
+    @Test(arguments: [
+        ("# Plan\nbody", "Plan"),
+        ("## **Bold** move", "Bold move"),
+        ("- [ ] buy milk", "buy milk"),
+        ("1. First step", "First step"),
+        ("> quoted", "quoted"),
+        ("[Docs](https://example.com) to read", "Docs to read"),
+        ("`make` fails", "make fails"),
+    ])
+    func titleReadsWithoutMarkdown(_ text: String, title: String) {
+        #expect(NoteTitle.title(from: text) == title)
+    }
+
+    @Test(arguments: [("#", "#"), ("---", "---"), ("```swift", "```swift"), ("#hashtag", "#hashtag"),
+                      ("- ", "-"), ("**", "**")])
+    func syntaxOnlyTitleIsKeptAsTyped(_ text: String, title: String) {
+        #expect(NoteTitle.title(from: text) == title)
+    }
+
+    @Test func previewReadsWithoutMarkdown() {
+        #expect(NoteTitle.preview(from: "# Groceries\n- milk\n- eggs") == "milk")
+        #expect(NoteTitle.preview(from: "Title\n\n## Section **one**") == "Section one")
+    }
+
     // MARK: Preview
 
     @Test func previewIsTheNextNonBlankLine() {

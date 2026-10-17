@@ -12,8 +12,14 @@ import Foundation
 
     @Test func firstLineBecomesTheWelcomeTitle() {
         let text = WelcomeNote.text(hotKeyDisplay: "⌃⌘N")
-        #expect(text.hasPrefix("Welcome to Popup Notes 👋\n"))
+        #expect(text.hasPrefix("# Welcome to Popup Notes 👋\n"))
         #expect(NoteTitle.title(from: text) == "Welcome to Popup Notes 👋")
+    }
+
+    @Test func headingsFillTheOutline() {
+        let headings = MarkdownOutline.headings(in: WelcomeNote.text(hotKeyDisplay: "⌃⌘N"))
+        #expect(headings.count >= 2)
+        #expect(headings.first?.title == "Welcome to Popup Notes 👋")
     }
 
     @Test func seedingCreatesExactlyOneWelcomeNote() throws {
