@@ -3,9 +3,12 @@ import SwiftUI
 @main
 struct PopupNotesApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    /// Never drop this binding: without it, macOS removing the icon quits
+    /// the app (see MenuBarIcon).
+    @AppStorage(MenuBarIcon.isShownKey) private var showsMenuBarIcon = true
 
     var body: some Scene {
-        MenuBarExtra("Popup Notes", systemImage: "note.text") {
+        MenuBarExtra("Popup Notes", systemImage: "note.text", isInserted: $showsMenuBarIcon) {
             MenuBarMenu(appDelegate: appDelegate)
         }
 

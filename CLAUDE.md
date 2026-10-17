@@ -90,7 +90,7 @@ Original architecture & scope rationale:
 
 | Unit | Responsibility |
 |---|---|
-| `PopupNotesApp` | SwiftUI `App` entry; declares `MenuBarExtra` + the `Settings` scene; bridges to `AppDelegate`. |
+| `PopupNotesApp` · `MenuBarIcon` | SwiftUI `App` entry; declares `MenuBarExtra` (its `isInserted` bound to the persisted "Show in Menu Bar" setting, `MenuBarIcon` — never drop it, see gotchas) + the `Settings` scene; bridges to `AppDelegate`. |
 | `AppDelegate` | Sets `.accessory` policy; builds the shared SwiftData `ModelContainer` (if the store won't open: an explanatory alert and quit, file untouched — never a crash loop); runs one-time legacy migration + first-launch onboarding (seed Welcome note, reconcile pre-consent login default); wires hotkey → panel and publishes its state in `HotKeyStatus`; opens the panel on a user launch and on reopen (Spotlight/Raycast/Finder), prewarms it after a login launch; saves on quit. |
 | `HotKeyManager` | Wraps Carbon `RegisterEventHotKey`; fires a Swift closure on the hotkey. |
 | `HotKeyStatus` · `HotKeyStore` | In-memory `@Observable` live hotkey state (combo + registered), observed by the menu bar, strip and Settings; `HotKeyStore` persists the combo in `UserDefaults`. |
@@ -100,7 +100,7 @@ Original architecture & scope rationale:
 | `MarkdownTextView` · `MarkdownStyler` · `MarkdownTheme` | The editor (`Editor/`): a TextKit 2 `NSTextView` whose text stays plain Markdown. The styler (text-storage delegate, `didProcessEditing` — never `willProcessEditing`, which misplaces the caret) restyles only the lines an edit changed; the view draws code-block/quote/rule backgrounds, continues lists on Return, nests with Tab/Shift-Tab, toggles ⌘B/⌘I (each its own undo step), checks task boxes on click, and scrolls to a heading. Never touch its `layoutManager` (falls back to TextKit 1). |
 | `NoteOutline` · `NoteOutlineView` | The sticky outline: `@Observable` headings + current section (caret's, or the top line's when the caret is off screen), kept current by the editor's coordinator; the pane lists them, highlights the current one, jumps on click. Shown with ≥ 2 headings while "Show Outline" (⋯ menu, ⌃⌘O, `showsOutline` default) is on and the detail is ≥ 420 pt wide. |
 | `OnboardingStripView` · `OnboardingDefaults` | Self-retiring bottom strip: hotkey hint (until first hotkey use or dismissal; failure variant when registration fails) + launch-at-login Enable/Not Now consent; one-time `UserDefaults` flags. |
-| `SettingsView` · `HotKeyRecorderView` · `SettingsButton` | `Settings` scene, two tabs — General: launch-at-login toggle (shows the real `SMAppService` status, "Open Login Items…" when approval is needed), global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. `SettingsButton` is the one "Settings…" path (panel ⋯ menu, strip, menu bar, ⌘,): it hides the floating panel and activates the app first. |
+| `SettingsView` · `HotKeyRecorderView` · `SettingsButton` | `Settings` scene, two tabs — General: launch-at-login toggle (shows the real `SMAppService` status, "Open Login Items…" when approval is needed), "Show in Menu Bar" toggle (how to reach the panel without the icon; on macOS 26 always "Open Menu Bar Settings…", since the system's own switch can hide it unreported), global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. `SettingsButton` is the one "Settings…" path (panel ⋯ menu, strip, menu bar, ⌘,): it hides the floating panel and activates the app first. |
 | `Note` (`@Model`) · `NotesRepository` · `NoteSelection` | SwiftData model (id, text, created, modified; first-line `title` and `preview` read without Markdown syntax, `isBlank`, `isAlive`) + CRUD and newer-wins `importNotes` (one fetch, throws rather than treating a failed fetch as empty); neighbor-on-delete rule. In `PopupNotesCore`. |
 | `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content (Markdown, so its headings fill the outline). In `PopupNotesCore`. |
 | `MarkdownBlocks` · `MarkdownInline` · `MarkdownOutline` · `MarkdownEditing` | Dependency-free Markdown in UTF-16 `NSRange`s: line kinds (headings, lists, tasks, quotes, fences, rules), inline spans (CommonMark emphasis rules, code, links, bare URLs), the heading outline, and pure edits for Return/Tab/⌘B/⌘I/tasks. In `PopupNotesCore`. |
@@ -187,7 +187,13 @@ menu bar **silently**, no panel (this is the one path `open -a` cannot
 exercise — it needs a real login). Open
 **Settings (⌘,)**, record a new shortcut and confirm the hint (after
 resetting only its flags) mirrors it; try export/import; test once over a
-full-screen app.
+full-screen app. Menu bar icon: turn **Show in Menu Bar** off and on — the
+icon goes and comes back, the app keeps running. Then switch Popup Notes
+off under System Settings ▸ Menu Bar ▸ Allow in the Menu Bar (macOS 26):
+the app must keep running (the hotkey still opens the panel, Spotlight
+reopens it, ⋯ ▸ Settings… works) and launch after launch it must not quit
+— that switch once killed it within a second of starting. Switch it back
+on, turn Show in Menu Bar on again, and the icon returns.
 
 ## Key gotchas / constraints
 
@@ -198,7 +204,21 @@ full-screen app.
   dismiss. Verify the exact `NSApp.activate` / first-responder sequence against
   current docs and test on hardware.
 - **Accessory app:** `LSUIElement = true` means no Dock icon — the menu-bar
-  item is the only visible affordance and the way to quit.
+  item is the only always-visible affordance. It can be hidden, so the
+  panel's ⋯ menu also carries Settings and Quit, and reopening the app
+  (Spotlight, Raycast, Finder) shows the panel.
+- **Never drop `MenuBarExtra`'s `isInserted` binding.** macOS takes the icon
+  away when the user switches the app off under System Settings ▸ Menu Bar ▸
+  Allow in the Menu Bar (macOS 26) or ⌘-drags it off, and a `MenuBarExtra`
+  without the binding then quits a menu-bar-only app (documented: "An app
+  that only shows in the menu bar will be automatically terminated if the
+  user removes the extra"). While the switch stays off, Control Center can
+  send that removal (`NSStatusItemChangeVisibilityAction` → AppKit
+  `terminate:`) within a second of launch, launch after launch — exit 0, no
+  crash report, global hotkey gone. Seen 2026-10-17 on 26.7.1: one "Popup
+  Notes" row covered both the real and the `.audit` bundle ids, and Control
+  Center sent the removal at some launches and not at others. With the
+  binding, it only turns "Show in Menu Bar" off.
 - **Overlay reach:** set `collectionBehavior` to `.canJoinAllSpaces` +
   `.fullScreenAuxiliary` so the panel shows over full-screen apps and on all
   Spaces.

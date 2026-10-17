@@ -31,6 +31,7 @@ struct SettingsView: View {
         Form {
             Section {
                 LaunchAtLoginRow()
+                MenuBarIconRow()
             }
             Section("Shortcut") {
                 HotKeyRecorderView { appDelegate.applyHotKey($0) }
@@ -205,6 +206,33 @@ private struct LaunchAtLoginRow: View {
             LaunchAtLogin.setEnabled(enabled)
         }
         refresh()
+    }
+}
+
+/// Show in Menu Bar. Turns itself off when macOS takes the icon away (see
+/// MenuBarIcon), and says how to reach the notes panel without it. On
+/// macOS 26 the system's own switch can also keep the icon hidden — even
+/// right after this is turned on — and no API reports that switch, so the
+/// way to it is always offered.
+private struct MenuBarIconRow: View {
+    @AppStorage(MenuBarIcon.isShownKey) private var isShown = true
+    private var hotKey: HotKeyStatus { .shared }
+
+    var body: some View {
+        Toggle("Show in Menu Bar", isOn: $isShown)
+        if !isShown {
+            Text(hotKey.isRegistered
+                 ? "Open the notes panel with \(hotKey.combo.displayString) or from Spotlight; Settings and Quit are in its ⋯ menu."
+                 : "Open the notes panel from Spotlight; Settings and Quit are in its ⋯ menu.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        if #available(macOS 26, *) {
+            LabeledContent("System Settings must allow it too") {
+                Button("Open Menu Bar Settings…") { NSWorkspace.shared.open(MenuBarIcon.systemSettingsURL) }
+            }
+            .font(.callout)
+        }
     }
 }
 

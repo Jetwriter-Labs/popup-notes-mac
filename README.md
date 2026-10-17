@@ -12,6 +12,8 @@ without breaking flow — no Dock icon, no window juggling, no cloud.
   any app, full-screen apps and all Spaces included.
 - **Doesn't steal your context** — the panel floats over the current app
   without deactivating it, and focus returns the moment you dismiss.
+- **Menu bar icon optional** — turn it off in Settings (or under System
+  Settings ▸ Menu Bar); the hotkey and Spotlight still open your notes.
 - **Multiple notes** — a sidebar lists every note, titled by its first line.
   `⌘N` for a new one.
 - **Markdown, styled as you type** — headings, **bold**, *italic*, `code`,
