@@ -16,6 +16,12 @@ import Foundation
         #expect(NoteTitle.title(from: text) == "Welcome to Popup Notes 👋")
     }
 
+    @Test func showsAClosedToggleToOpen() {
+        let lines = MarkdownBlocks.lines(in: MarkdownText(WelcomeNote.text(hotKeyDisplay: "⌃⌘N")))
+        #expect(lines.contains { $0.block == .toggle(isOpen: false) })
+        #expect(lines.filter(\.isHidden).count == 1)
+    }
+
     @Test func headingsFillTheOutline() {
         let headings = MarkdownOutline.headings(in: WelcomeNote.text(hotKeyDisplay: "⌃⌘N"))
         #expect(headings.count >= 2)

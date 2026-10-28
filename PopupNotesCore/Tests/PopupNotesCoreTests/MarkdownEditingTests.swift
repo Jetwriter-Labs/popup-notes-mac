@@ -53,6 +53,18 @@ import Foundation
         run(marked) { MarkdownEditing.toggle("*", in: $0, selection: $1) }
     }
 
+    private func shortcut(_ marked: String) -> String? {
+        run(marked) { MarkdownEditing.toggleShortcut(in: $0, selection: $1) }
+    }
+
+    private func backspace(_ marked: String) -> String? {
+        run(marked) { MarkdownEditing.deleteBackward(in: $0, selection: $1) }
+    }
+
+    private func forwardDelete(_ marked: String) -> String? {
+        run(marked) { MarkdownEditing.deleteForward(in: $0, selection: $1) }
+    }
+
     private func toggleTask(_ string: String, at location: Int) -> String? {
         guard let change = MarkdownEditing.toggleTask(in: MarkdownText(string), at: location) else { return nil }
         return (string as NSString).replacingCharacters(in: change.range, with: change.replacement)
@@ -103,7 +115,7 @@ import Foundation
         ("|- item", "\t|- item"),
         ("1. one|", "\t1. one|"),
         ("{- a\n- b}", "{\t- a\n\t- b}"),
-        ("{- a\nplain}", "{\t- a\nplain}"),
+        ("{- a\nplain}", "{\t- a\n\tplain}"),
         ("{- a\n}- b", "{\t- a\n}- b"),
     ])
     func tabNestsListItems(_ before: String, after: String) {
@@ -126,7 +138,13 @@ import Foundation
     @Test func tabOutsideListsIsATab() {
         #expect(tab("plain|") == nil)
         #expect(shiftTab("plain|") == nil)
-        #expect(tab("{one\ntwo}") == nil)
+        #expect(tab("{pla}in") == nil)
+    }
+
+    @Test func tabMovesEverySelectedLine() {
+        #expect(tab("{one\ntwo}") == "{\tone\n\ttwo}")
+        #expect(tab("{a\n\nb}") == "{\ta\n\n\tb}") // blank lines stay empty
+        #expect(shiftTab("{\tone\n\ttwo}") == "{one\ntwo}")
     }
 
     // MARK: ⌘B / ⌘I
@@ -171,5 +189,100 @@ import Foundation
     @Test func onlyTasksToggle() {
         #expect(toggleTask("- milk", at: 0) == nil)
         #expect(toggleTask("[ ] not a list", at: 0) == nil)
+    }
+
+    // MARK: Toggles
+
+    @Test(arguments: [
+        ("> |", "▾ |"),
+        ("\t> |", "\t▾ |"),
+        ("> |hello", "▾ |hello"),
+        ("a\n> |", "a\n▾ |"),
+    ])
+    func greaterThanAndSpaceMakeAToggle(_ before: String, after: String) {
+        #expect(shortcut(before) == after)
+    }
+
+    @Test(arguments: ["a > |", "> > |", ">|", "```\n> |", "{> }"])
+    func greaterThanElsewhereStaysText(_ before: String) {
+        #expect(shortcut(before) == nil)
+    }
+
+    @Test(arguments: [
+        ("▾ Title|", "▾ Title\n\t|"),
+        ("\t▾ T|", "\t▾ T\n\t\t|"),
+        ("▾ Ti|tle", "▾ Ti\n\t|tle"),
+        ("▸ T|\n\tbody\nafter", "▸ T\n\tbody\n▾ |\nafter"),
+        ("▸ Ti|tle\n\tbody", "▸ Ti\n\tbody\n▾ |tle"),
+        ("▸ T|", "▸ T\n▾ |"),
+    ])
+    func returnOnAToggle(_ before: String, after: String) {
+        #expect(newline(before) == after)
+    }
+
+    @Test(arguments: [
+        ("▾ T\n\tsome text|", "▾ T\n\tsome text\n\t|"),
+        ("▾ T\n\t# Heading|", "▾ T\n\t# Heading\n\t|"),
+        ("▾ T\n\t- a|", "▾ T\n\t- a\n\t- |"),
+        ("▾ T\n\t\t|", "▾ T\n\t|"),
+        ("▾ T\n\t|", "▾ T\n|"),
+    ])
+    func returnInsideAToggleStaysInside(_ before: String, after: String) {
+        #expect(newline(before) == after)
+    }
+
+    @Test(arguments: [
+        ("▾ |", "|"),
+        ("\t▾ |", "▾ |"),
+        ("▾ A\n\t▾ |", "▾ A\n\t|"),
+        ("▾ T\n\t- |", "▾ T\n\t|"),
+        ("▾ T\n\t\t- |", "▾ T\n\t- |"),
+    ])
+    func returnOnAnEmptyToggleOrItemEndsIt(_ before: String, after: String) {
+        #expect(newline(before) == after)
+    }
+
+    @Test(arguments: ["\tindented|", "▾ T\n|\tchild"])
+    func returnOutsideTogglesIsUnchanged(_ before: String) {
+        #expect(newline(before) == nil)
+    }
+
+    @Test(arguments: [
+        ("▾ T|\n\ta\nafter", "\t▾ T|\n\t\ta\nafter"),
+        ("▾ T\n\ta|", "▾ T\n\t\ta|"),
+        ("▾ T\n\t|", "▾ T\n\t\t|"),
+    ])
+    func tabMovesATogglesLinesWithIt(_ before: String, after: String) {
+        #expect(tab(before) == after)
+    }
+
+    @Test(arguments: [
+        ("\t▾ T|\n\t\ta", "▾ T|\n\ta"),
+        ("▾ T\n\ta|", "▾ T\na|"),
+        ("▾ T|\n\ta", "▾ T|\n\ta"),
+    ])
+    func shiftTabMovesAToggleOut(_ before: String, after: String) {
+        #expect(shiftTab(before) == after)
+    }
+
+    @Test(arguments: [
+        ("▾ |Title", "|Title"),
+        ("\t▸ |T\n\t\tbody", "\t|T\n\t\tbody"),
+        ("▸ T\n\tbody\n|after", "▸ T|after\n\tbody"),
+        ("▸ T\n\tbody\n|\nafter", "▸ T|\n\tbody\nafter"),
+    ])
+    func backspaceAroundToggles(_ before: String, after: String) {
+        #expect(backspace(before) == after)
+    }
+
+    @Test(arguments: ["▾ T\n\tbody\n|after", "▾ T|", "{▾ }T", "a|b"])
+    func backspaceElsewhereIsUnchanged(_ before: String) {
+        #expect(backspace(before) == nil)
+    }
+
+    @Test func forwardDeleteAtAClosedTitleSkipsTheFold() {
+        #expect(forwardDelete("▸ T|\n\tbody\nafter") == "▸ T|after\n\tbody")
+        #expect(forwardDelete("▸ T|\n\tbody") == "▸ T|\n\tbody")
+        #expect(forwardDelete("▾ T|\n\tbody") == nil)
     }
 }

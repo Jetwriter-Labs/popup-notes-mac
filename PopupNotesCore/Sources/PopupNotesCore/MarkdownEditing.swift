@@ -16,8 +16,8 @@ public struct MarkdownEdit: Equatable, Sendable {
 
 /// The conveniences that make Markdown comfortable to type: lists that
 /// continue on Return, Tab to nest them, ⌘B / ⌘I to wrap a selection, task
-/// boxes that check off. Each returns nil when the key should simply do
-/// what it always does.
+/// boxes that check off, toggles made by typing `> `. Each returns nil when
+/// the key should simply do what it always does.
 public enum MarkdownEditing {
     /// The text Tab adds to nest a list item one level.
     static let indentUnit = "\t"
@@ -29,14 +29,23 @@ public enum MarkdownEditing {
     /// unchecked). Return on an item that's still empty ends the list
     /// instead: a nested item moves out a level, a top-level one loses its
     /// marker — so pressing Return twice gets you out.
+    ///
+    /// On an open toggle's title, Return starts the first line inside it; on
+    /// a closed one, a new toggle after everything it folds away. Inside a
+    /// toggle, the new line keeps the indentation that puts it there, and
+    /// Return on a line holding nothing but that indentation steps out a
+    /// level — so pressing Return twice leaves the toggle too.
     public static func newline(in text: MarkdownText, selection: NSRange) -> MarkdownEdit? {
         guard selection.length == 0 else { return nil }
         let caret = selection.location
         let lines = MarkdownBlocks.lines(in: text)
         guard let index = MarkdownBlocks.lineIndex(containing: caret, in: lines) else { return nil }
         let line = lines[index]
+        guard let marker = line.marker else { return keepingIndentation(line, in: text, caret: caret) }
         // In the indentation or the marker, Return just moves the line down.
-        guard caret >= NSMaxRange(line.prefix), let marker = line.marker else { return nil }
+        guard caret >= NSMaxRange(line.prefix) else { return nil }
+        let indentation = text.string(in: NSRange(location: line.range.location,
+                                                  length: marker.location - line.range.location))
 
         var continuation: String
         switch line.block {
@@ -48,20 +57,77 @@ public enum MarkdownEditing {
             if item.task != nil { continuation += "[ ] " }
         case .quote:
             continuation = "> "
+        case .toggle(let isOpen) where line.content.length > 0:
+            if !isOpen { return toggle(after: index, in: lines, text: text, caret: caret) }
+            let insertion = "\n" + indentation + indentUnit
+            return MarkdownEdit(range: NSRange(location: caret, length: 0), replacement: insertion,
+                                selection: NSRange(location: caret + insertion.utf16.count, length: 0))
+        case .toggle:
+            continuation = ""
         default:
-            return nil
+            return keepingIndentation(line, in: text, caret: caret)
         }
 
-        if line.content.length == 0 {
-            if case .listItem = line.block, let outdented = outdent(line, in: text, caret: caret) {
-                return outdented
-            }
-            return MarkdownEdit(range: line.range, replacement: "",
-                                selection: NSRange(location: line.range.location, length: 0))
-        }
-        let indentation = text.string(in: NSRange(location: line.range.location,
-                                                  length: marker.location - line.range.location))
+        if line.content.length == 0 { return end(index, in: lines, text: text, caret: caret) }
         let insertion = "\n" + indentation + continuation
+        return MarkdownEdit(range: NSRange(location: caret, length: 0), replacement: insertion,
+                            selection: NSRange(location: caret + insertion.utf16.count, length: 0))
+    }
+
+    /// Return on an empty list item, quote or toggle. A nested item or
+    /// toggle moves out a level, a top-level one loses its marker. Inside a
+    /// toggle, its top level is the toggle's: the line loses its marker but
+    /// stays in the toggle, as plain text.
+    private static func end(_ index: Int, in lines: [MarkdownLine], text: MarkdownText, caret: Int) -> MarkdownEdit {
+        let line = lines[index]
+        if line.isListItem || line.isToggle, let outdented = outdent(line, in: text, caret: caret) {
+            let parent = MarkdownToggles.parent(of: index, in: lines)
+            let left = columns(of: line, in: text, after: outdented.range.length)
+            if parent.map({ left > columns(of: lines[$0], in: text) }) ?? true { return outdented }
+        }
+        if line.toggleDepth > 0, let marker = line.marker {
+            return MarkdownEdit(range: NSRange(location: marker.location, length: NSMaxRange(line.range) - marker.location),
+                                replacement: "", selection: NSRange(location: marker.location, length: 0))
+        }
+        return MarkdownEdit(range: line.range, replacement: "",
+                            selection: NSRange(location: line.range.location, length: 0))
+    }
+
+    /// Return on a closed toggle's title: a new toggle after the lines it
+    /// folds away. Title text after the caret moves to the new toggle.
+    private static func toggle(after index: Int, in lines: [MarkdownLine], text: MarkdownText,
+                               caret: Int) -> MarkdownEdit {
+        let line = lines[index]
+        let marker = line.marker ?? line.prefix
+        let body = MarkdownToggles.body(of: index, in: lines)
+        let titleEnd = NSMaxRange(line.range)
+        let blockEnd = body.isEmpty ? titleEnd : NSMaxRange(lines[body.upperBound - 1].range)
+        let opening = "\n" + text.string(in: NSRange(location: line.range.location,
+                                                     length: marker.location - line.range.location))
+            + ToggleMarker.string(open: true) + " "
+        if caret == titleEnd {
+            return MarkdownEdit(range: NSRange(location: blockEnd, length: 0), replacement: opening,
+                                selection: NSRange(location: blockEnd + opening.utf16.count, length: 0))
+        }
+        let folded = text.string(in: NSRange(location: titleEnd, length: blockEnd - titleEnd))
+        let tail = text.string(in: NSRange(location: caret, length: titleEnd - caret))
+        return MarkdownEdit(range: NSRange(location: caret, length: blockEnd - caret),
+                            replacement: folded + opening + tail,
+                            selection: NSRange(location: caret + (folded + opening).utf16.count, length: 0))
+    }
+
+    /// Inside a toggle, a line without a marker of its own: the new line
+    /// keeps its indentation. On a line that is nothing but indentation,
+    /// Return steps out a level instead. Nil outside toggles.
+    private static func keepingIndentation(_ line: MarkdownLine, in text: MarkdownText, caret: Int) -> MarkdownEdit? {
+        guard line.toggleDepth > 0 else { return nil }
+        if line.block == .blank {
+            guard caret == NSMaxRange(line.range) else { return nil }
+            return outdent(line, in: text, caret: caret)
+        }
+        let first = MarkdownBlocks.indentation(text.units, line.range).first
+        guard caret >= first else { return nil }
+        let insertion = "\n" + text.string(in: NSRange(location: line.range.location, length: first - line.range.location))
         return MarkdownEdit(range: NSRange(location: caret, length: 0), replacement: insertion,
                             selection: NSRange(location: caret + insertion.utf16.count, length: 0))
     }
@@ -74,12 +140,20 @@ public enum MarkdownEditing {
                             selection: NSRange(location: caret - removed, length: 0))
     }
 
+    /// How wide `line`'s indentation is, without its first `dropping` units.
+    private static func columns(of line: MarkdownLine, in text: MarkdownText, after dropping: Int = 0) -> Int {
+        MarkdownBlocks.indentation(text.units, NSRange(location: line.range.location + dropping,
+                                                      length: line.range.length - dropping)).columns
+    }
+
     // MARK: - Tab
 
-    /// Tab — or Shift-Tab, `outdent` — on list items: every list item the
-    /// selection touches moves in (out) one level, wherever the caret is in
-    /// it. Nil, a plain tab, when the selection touches no list item. An
-    /// edit that changes nothing means Shift-Tab had nowhere to go.
+    /// Tab — or Shift-Tab, `outdent` — moves lines in (out) one level: with a
+    /// caret, a list item, a toggle or a line inside a toggle, wherever the
+    /// caret is in it; with a selection over several lines, all of them. A
+    /// toggle takes the lines it holds along. Nil, a plain tab, for a caret
+    /// on any other line. An edit that changes nothing means Shift-Tab had
+    /// nowhere to go.
     public static func indentation(in text: MarkdownText, selection: NSRange, outdent: Bool) -> MarkdownEdit? {
         let lines = MarkdownBlocks.lines(in: text)
         guard let first = MarkdownBlocks.lineIndex(containing: selection.location, in: lines),
@@ -87,18 +161,29 @@ public enum MarkdownEditing {
         // Whole lines selected by dragging end at the start of the next line;
         // that line isn't part of the selection.
         if last > first, NSMaxRange(selection) == lines[last].range.location { last -= 1 }
-        let affected = lines[first...last]
-        guard affected.contains(where: \.isListItem) else { return nil }
+        let severalLines = last > first
+        guard severalLines || lines[first].nests else { return nil }
+        for index in first...last where lines[index].isToggle {
+            last = max(last, MarkdownToggles.body(of: index, in: lines).upperBound - 1)
+        }
 
         // Each change happens at a line's start: `inserted` units added,
         // `removed` units taken away.
         var changes: [(start: Int, inserted: Int, removed: Int)] = []
         var replacement: [UInt16] = []
-        for line in affected {
+        // A toggle that can't move out keeps its lines where they are.
+        var staysThrough = -1
+        for index in first...last {
+            let line = lines[index]
             var body = text.units[line.range.location..<NSMaxRange(line.fullRange)]
-            if line.isListItem {
+            // Blank lines among several get no indentation of their own.
+            let isBlank = MarkdownBlocks.indentation(text.units, line.range).first == NSMaxRange(line.range)
+            if index > staysThrough, !(severalLines && isBlank) {
                 if outdent {
                     let removed = outdentLength(of: line, in: text)
+                    if removed == 0, line.isToggle {
+                        staysThrough = MarkdownToggles.body(of: index, in: lines).upperBound - 1
+                    }
                     body = body.dropFirst(removed)
                     changes.append((line.range.location, 0, removed))
                 } else {
@@ -200,6 +285,78 @@ public enum MarkdownEditing {
         return MarkdownEdit(range: NSRange(location: box.location + 1, length: 1),
                             replacement: task == .open ? "x" : " ", selection: nil)
     }
+
+    // MARK: - Toggles
+
+    /// `>` and a space at the start of a line make it a toggle, as in Notion:
+    /// the editor asks right after a space is typed. Undoing the change
+    /// leaves the `> ` as typed — a quote.
+    public static func toggleShortcut(in text: MarkdownText, selection: NSRange) -> MarkdownEdit? {
+        let caret = selection.location
+        guard selection.length == 0, caret >= 2,
+              text.units[caret - 1] == ASCII.space, text.units[caret - 2] == ASCII.greaterThan else { return nil }
+        let lines = MarkdownBlocks.lines(in: text)
+        guard let index = MarkdownBlocks.lineIndex(containing: caret, in: lines), lines[index].block != .code,
+              text.units[lines[index].range.location..<(caret - 2)].allSatisfy(\.isSpaceOrTab) else { return nil }
+        return MarkdownEdit(range: NSRange(location: caret - 2, length: 2),
+                            replacement: ToggleMarker.string(open: true) + " ", selection: nil)
+    }
+
+    /// Backspace at the start of a toggle's title turns the toggle back into
+    /// plain text. At the start of the line below a closed toggle, it joins
+    /// that line to the toggle's title — the line it shows under — and the
+    /// lines folded away in between stay as they are.
+    public static func deleteBackward(in text: MarkdownText, selection: NSRange) -> MarkdownEdit? {
+        guard selection.length == 0 else { return nil }
+        let caret = selection.location
+        // Most backspaces are neither right after a marker nor at a line's
+        // start: those needn't read the whole note's lines.
+        var markerEnd = caret
+        while markerEnd > 0, text.units[markerEnd - 1].isSpaceOrTab { markerEnd -= 1 }
+        let afterMarker = markerEnd > 0
+            && (text.units[markerEnd - 1] == ToggleMarker.open || text.units[markerEnd - 1] == ToggleMarker.closed)
+        guard afterMarker || (caret > 0 && text.units[caret - 1].isLineTerminator) else { return nil }
+        let lines = MarkdownBlocks.lines(in: text)
+        guard let index = MarkdownBlocks.lineIndex(containing: caret, in: lines) else { return nil }
+        let line = lines[index]
+        if line.isToggle, let marker = line.marker, caret == NSMaxRange(line.prefix) {
+            return MarkdownEdit(range: NSRange(location: marker.location, length: caret - marker.location),
+                                replacement: "", selection: NSRange(location: marker.location, length: 0))
+        }
+        guard caret == line.range.location, index > 0, lines[index - 1].isHidden, !line.isHidden else { return nil }
+        return join(index, in: lines, text: text)
+    }
+
+    /// Forward Delete at the end of a closed toggle's title joins the line
+    /// shown below it, keeping what's folded away in between. With nothing
+    /// below, it does nothing rather than reach into the folded lines.
+    public static func deleteForward(in text: MarkdownText, selection: NSRange) -> MarkdownEdit? {
+        let caret = selection.location
+        guard selection.length == 0, caret < text.length, text.units[caret].isLineTerminator else { return nil }
+        let lines = MarkdownBlocks.lines(in: text)
+        guard let index = MarkdownBlocks.lineIndex(containing: caret, in: lines), !lines[index].isHidden,
+              caret == NSMaxRange(lines[index].range), index + 1 < lines.count, lines[index + 1].isHidden else { return nil }
+        var below = index + 1
+        while below < lines.count, lines[below].isHidden { below += 1 }
+        guard below < lines.count else {
+            return MarkdownEdit(range: NSRange(location: caret, length: 0), replacement: "", selection: nil)
+        }
+        return join(below, in: lines, text: text)
+    }
+
+    /// Moves line `index`, which shows right below some folded lines, onto
+    /// the end of the line above them, with the folded lines after it.
+    private static func join(_ index: Int, in lines: [MarkdownLine], text: MarkdownText) -> MarkdownEdit {
+        var above = index - 1
+        while above > 0, lines[above].isHidden { above -= 1 }
+        let titleEnd = NSMaxRange(lines[above].range)
+        let foldEnd = NSMaxRange(lines[index - 1].range)
+        let line = lines[index]
+        return MarkdownEdit(range: NSRange(location: titleEnd, length: NSMaxRange(line.range) - titleEnd),
+                            replacement: text.string(in: line.range)
+                                + text.string(in: NSRange(location: titleEnd, length: foldEnd - titleEnd)),
+                            selection: NSRange(location: titleEnd, length: 0))
+    }
 }
 
 extension MarkdownLine {
@@ -207,4 +364,12 @@ extension MarkdownLine {
         if case .listItem = block { return true }
         return false
     }
+
+    var isToggle: Bool {
+        if case .toggle = block { return true }
+        return false
+    }
+
+    /// Tab nests it even with just a caret on it.
+    var nests: Bool { isListItem || isToggle || toggleDepth > 0 }
 }

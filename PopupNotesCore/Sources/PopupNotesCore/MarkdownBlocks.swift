@@ -3,16 +3,20 @@ import Foundation
 /// What a line is, Markdown-wise. Notes are styled line by line, so this is
 /// a deliberately small, line-based reading of CommonMark: ATX headings
 /// (`#`), bullet / numbered / task lists, block quotes, fenced code blocks
-/// and thematic breaks. Setext headings (a title underlined with `===`) and
-/// indented code blocks are not recognized: in a notes editor, underlining
-/// with `---` and indenting text by four spaces are far more often meant
-/// literally than as Markdown.
+/// and thematic breaks — plus Notion-style toggles. Setext headings (a
+/// title underlined with `===`) and indented code blocks are not
+/// recognized: in a notes editor, underlining with `---` and indenting text
+/// by four spaces are far more often meant literally than as Markdown.
 public enum MarkdownBlock: Equatable, Sendable {
     case blank
     case paragraph
     case heading(level: Int)
     case listItem(MarkdownListMarker)
     case quote
+    /// A toggle's title: `▾ Title` when open, `▸ Title` when closed. The
+    /// lines indented under it are its content, folded away while it's
+    /// closed.
+    case toggle(isOpen: Bool)
     /// The opening or closing line of a fenced code block (```` ``` ```` or `~~~`).
     case fence
     /// A line inside a fenced code block.
@@ -53,17 +57,22 @@ public struct MarkdownLine: Equatable, Sendable {
     public var terminatorLength: Int
     public var block: MarkdownBlock
     /// The syntax that opens the line, up to where its content starts:
-    /// indentation plus `## `, `- ` (and a task box), `1. ` or `> `.
+    /// indentation plus `## `, `- ` (and a task box), `1. `, `> ` or `▾ `.
     public var prefix: NSRange
     /// The part that can hold inline Markdown (emphasis, code, links).
     /// Empty for blank lines, fences, code and rules.
     public var content: NSRange
-    /// The marker itself, within `prefix`: `##`, `-`, `1.` or `>`.
+    /// The marker itself, within `prefix`: `##`, `-`, `1.`, `>` or `▾`.
     public var marker: NSRange?
     /// A task item's `[ ]` / `[x]` box, within `prefix`.
     public var taskBox: NSRange?
     /// A heading's optional closing `#`s and the space before them.
     public var closingSequence: NSRange?
+    /// How many toggles the line is inside: 0 at the top level, 1 under a
+    /// toggle, 2 under a toggle that is itself inside one.
+    public var toggleDepth = 0
+    /// Folded away: inside a closed toggle.
+    public var isHidden = false
 
     /// The line including its line break.
     public var fullRange: NSRange {
@@ -75,10 +84,17 @@ public enum MarkdownBlocks {
     /// Every line of `text`, classified. A text that ends in a line break
     /// has a final empty line (where the caret sits after Return), so the
     /// lines always cover every caret position.
+    ///
+    /// A toggle holds the lines after it that are indented further than it
+    /// is, and the blank lines between them; blank lines after its last
+    /// line are not its own.
     public static func lines(in text: MarkdownText) -> [MarkdownLine] {
         let units = text.units
         var lines: [MarkdownLine] = []
         var fence: Fence?
+        var toggles = OpenToggles()
+        // Blank lines that go wherever the next line does.
+        var pending: [Int] = []
         var start = 0
         while true {
             var end = start
@@ -89,9 +105,40 @@ public enum MarkdownBlocks {
                     && end + 1 < units.count && units[end + 1] == ASCII.lineFeed
                 terminator = isCRLF ? 2 : 1
             }
-            lines.append(classify(units, NSRange(location: start, length: end - start),
-                                  terminatorLength: terminator, fence: &fence))
-            if terminator == 0 { return lines }
+            let range = NSRange(location: start, length: end - start)
+            let (first, columns) = indentation(units, range)
+            if first == end {
+                var line = classify(units, range, terminatorLength: terminator, first: first, columns: columns,
+                                    fence: &fence)
+                // Indented past the innermost toggle, it's inside that one —
+                // as is the indentation Return leaves on a new line in it.
+                if let innermost = toggles.innermost, columns > innermost.column {
+                    toggles.place(&line)
+                } else {
+                    pending.append(lines.count)
+                }
+                lines.append(line)
+            } else {
+                toggles.leave(columnsAtMost: columns)
+                for index in pending { toggles.place(&lines[index]) }
+                pending.removeAll()
+                // Inside a toggle, indentation counts from just past the
+                // toggle's own: a heading or quote indented under it is still one.
+                let base = toggles.innermost.map { $0.column + 1 } ?? 0
+                var line = classify(units, range, terminatorLength: terminator, first: first,
+                                    columns: columns - base, fence: &fence)
+                toggles.place(&line)
+                if case .toggle(let isOpen) = line.block { toggles.enter(column: columns, isOpen: isOpen) }
+                lines.append(line)
+            }
+            if terminator == 0 {
+                // The empty line after a final line break is shown (by TextKit)
+                // as part of the line above it, so it folds away with that line.
+                if range.length == 0, lines.count > 1, lines[lines.count - 2].isHidden {
+                    lines[lines.count - 1].isHidden = true
+                }
+                return lines
+            }
             start = end + terminator
         }
     }
@@ -113,22 +160,63 @@ public enum MarkdownBlocks {
         var length: Int
     }
 
+    /// The toggles a line can be inside, outermost first: those above it
+    /// that it is indented further than.
+    struct OpenToggles {
+        struct Toggle {
+            var column: Int
+            var isOpen: Bool
+        }
+
+        private var stack: [Toggle] = []
+        private var closedCount = 0
+
+        var innermost: Toggle? { stack.last }
+
+        /// Ends the toggles that a line indented `columns` is outside of.
+        mutating func leave(columnsAtMost columns: Int) {
+            while let last = stack.last, last.column >= columns {
+                stack.removeLast()
+                if !last.isOpen { closedCount -= 1 }
+            }
+        }
+
+        mutating func enter(column: Int, isOpen: Bool) {
+            stack.append(Toggle(column: column, isOpen: isOpen))
+            if !isOpen { closedCount += 1 }
+        }
+
+        /// Puts `line` inside the toggles open so far.
+        func place(_ line: inout MarkdownLine) {
+            line.toggleDepth = stack.count
+            line.isHidden = closedCount > 0
+        }
+    }
+
+    /// Where a line's indentation ends, and how wide it is: a tab reaches
+    /// the next multiple of four columns, as in CommonMark.
+    static func indentation(_ u: [UInt16], _ range: NSRange) -> (first: Int, columns: Int) {
+        let end = NSMaxRange(range)
+        var first = range.location
+        var columns = 0
+        while first < end, u[first].isSpaceOrTab {
+            columns += u[first] == ASCII.tab ? 4 - columns % 4 : 1
+            first += 1
+        }
+        return (first, columns)
+    }
+
     /// Classifies one line, given whether a fenced code block is open before
-    /// it, and updates that state for the next line.
-    static func classify(_ u: [UInt16], _ range: NSRange, terminatorLength: Int,
+    /// it, and updates that state for the next line. `first` is where its
+    /// indentation ends, `columns` how wide that indentation is — counted
+    /// from the toggle the line is in, if any.
+    static func classify(_ u: [UInt16], _ range: NSRange, terminatorLength: Int, first: Int, columns: Int,
                          fence: inout Fence?) -> MarkdownLine {
         let start = range.location
         let end = NSMaxRange(range)
         var line = MarkdownLine(range: range, terminatorLength: terminatorLength, block: .paragraph,
                                 prefix: NSRange(location: start, length: 0), content: range)
         let empty = NSRange(location: start, length: 0)
-
-        var first = start
-        var columns = 0
-        while first < end, u[first].isSpaceOrTab {
-            columns += u[first] == ASCII.tab ? 4 - columns % 4 : 1
-            first += 1
-        }
 
         if let open = fence {
             if isClosingFence(u, from: first, to: end, closing: open) {
@@ -177,12 +265,28 @@ public enum MarkdownBlocks {
             }
         }
 
-        // List items nest by indentation, so any amount is allowed.
+        // Toggles and list items nest by indentation, so any amount is allowed.
+        if classifyToggle(u, first: first, end: end, into: &line) { return line }
         if classifyListItem(u, first: first, end: end, into: &line) { return line }
 
         line.prefix = NSRange(location: start, length: first - start)
         line.content = NSRange(location: first, length: end - first)
         return line
+    }
+
+    /// `▾` (open) or `▸` (closed), then a space or the end of the line.
+    private static func classifyToggle(_ u: [UInt16], first: Int, end: Int,
+                                       into line: inout MarkdownLine) -> Bool {
+        let c = u[first]
+        guard c == ToggleMarker.open || c == ToggleMarker.closed,
+              first + 1 == end || u[first + 1].isSpaceOrTab else { return false }
+        var contentStart = first + 1
+        while contentStart < end, u[contentStart].isSpaceOrTab { contentStart += 1 }
+        line.block = .toggle(isOpen: c == ToggleMarker.open)
+        line.marker = NSRange(location: first, length: 1)
+        line.prefix = NSRange(location: line.range.location, length: contentStart - line.range.location)
+        line.content = NSRange(location: contentStart, length: end - contentStart)
+        return true
     }
 
     /// `#` to `######`, then a space or the end of the line. `#tag` stays text.

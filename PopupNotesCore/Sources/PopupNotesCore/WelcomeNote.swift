@@ -19,6 +19,8 @@ public enum WelcomeNote {
         - Start a line with `#` for a heading; type **bold** (⌘B), *italic* (⌘I) or `code`.
         - Lists carry on when you press Return, and Tab nests them.
         - [ ] Click a box to check off a task.
+        ▸ Type > and a space for a toggle — click its arrow to open it.
+        \tWhatever is indented under a toggle folds away with it. ⌘↩ opens or closes the one you're in.
 
         ## Outline
         Headings appear in the outline beside the note — click one to jump to it.

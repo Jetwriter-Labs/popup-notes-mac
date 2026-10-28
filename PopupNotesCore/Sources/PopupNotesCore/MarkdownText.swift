@@ -3,7 +3,8 @@ import Foundation
 /// A note's text as UTF-16 code units — the unit `NSString` and
 /// `NSTextStorage` ranges count in — so every range the Markdown parser
 /// reports can go straight to AppKit. Markdown's syntax characters are all
-/// ASCII, so scanning code units never mistakes half of a surrogate pair for
+/// ASCII, and the toggle markers single units outside the surrogate range,
+/// so scanning code units never mistakes half of a surrogate pair for
 /// syntax.
 public struct MarkdownText: Sendable {
     public let units: [UInt16]
@@ -55,6 +56,15 @@ enum ASCII {
     static let backtick: UInt16 = 0x60      // `
     static let lowerX: UInt16 = 0x78        // x
     static let tilde: UInt16 = 0x7E         // ~
+}
+
+/// A toggle's marker, which says whether it's open. Not CommonMark — it
+/// has no toggles — and not ASCII, so no Markdown text uses it by chance.
+enum ToggleMarker {
+    static let open: UInt16 = 0x25BE        // ▾
+    static let closed: UInt16 = 0x25B8      // ▸
+
+    static func string(open: Bool) -> String { open ? "\u{25BE}" : "\u{25B8}" }
 }
 
 extension UInt16 {

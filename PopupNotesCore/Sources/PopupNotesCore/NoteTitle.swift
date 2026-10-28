@@ -30,7 +30,7 @@ public enum NoteTitle {
         return next.isEmpty ? "" : withoutMarkdown(line(startingAt: next))
     }
 
-    /// The line as it reads: no heading `#`s, list or quote markers,
+    /// The line as it reads: no heading `#`s, list, quote or toggle markers,
     /// emphasis or code backticks; a link shows its text. A line that is
     /// nothing but syntax (a bare `#`, a `---` rule, a code fence) is kept
     /// as typed rather than turned into nothing.
@@ -38,7 +38,7 @@ public enum NoteTitle {
         let text = MarkdownText(line)
         guard let parsed = MarkdownBlocks.lines(in: text).first else { return line }
         switch parsed.block {
-        case .heading, .listItem, .quote, .paragraph:
+        case .heading, .listItem, .quote, .toggle, .paragraph:
             let plain = MarkdownInline.plainText(in: text, range: parsed.content)
                 .trimmingCharacters(in: .whitespaces)
             return plain.isEmpty ? line : plain
