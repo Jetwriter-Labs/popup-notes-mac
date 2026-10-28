@@ -4,6 +4,8 @@ extension NSAttributedString.Key {
     /// Marks the lines whose background `MarkdownTextView` draws: a
     /// `MarkdownTheme.Decoration` raw value.
     static let markdownDecoration = NSAttributedString.Key("PopupNotesMarkdownDecoration")
+    /// Marks the lines a closed toggle folds away: they aren't laid out.
+    nonisolated static let markdownHidden = NSAttributedString.Key("PopupNotesMarkdownHidden")
 }
 
 /// How Markdown looks in the editor: fonts, colors and paragraph styles.
@@ -79,6 +81,30 @@ final class MarkdownTheme {
         paragraphStyle(firstLineIndent: firstLineIndent, headIndent: firstLineIndent + width(of: prefix))
     }
 
+    /// A toggle's arrow — its `▾` / `▸` marker — a size up from the text, so
+    /// it's easy to see and to click.
+    lazy var toggleMarkerFont = font(size: (bodyFont.pointSize * 1.3).rounded())
+
+    /// A toggle's title starts at the tab stop past its marker, where the
+    /// lines indented under it start too: `kern` widens the space after the
+    /// marker to reach it, and wrapped title lines line up there. The line
+    /// keeps the body text's height, bigger arrow and all.
+    func toggleTitleIndent(prefix: String) -> (kern: CGFloat, paragraphStyle: NSParagraphStyle) {
+        let prefixWidth = width(of: prefix, markerFont: toggleMarkerFont)
+        let stop = (prefixWidth / tabInterval).rounded(.up) * tabInterval
+        let style = paragraphStyle(headIndent: stop).mutableCopy() as! NSMutableParagraphStyle
+        style.minimumLineHeight = bodyLineHeight
+        style.maximumLineHeight = bodyLineHeight
+        return (stop - prefixWidth, style)
+    }
+
+    /// Where the lines inside a toggle start: its title's indent.
+    func toggleContentIndent(prefix: String) -> CGFloat {
+        toggleTitleIndent(prefix: prefix).paragraphStyle.headIndent
+    }
+
+    private lazy var bodyLineHeight = (bodyFont.ascender - bodyFont.descender + bodyFont.leading).rounded(.up)
+
     func codeParagraphStyle() -> NSParagraphStyle {
         paragraphStyle(firstLineIndent: codeInset, headIndent: codeInset, tailIndent: -codeInset)
     }
@@ -95,14 +121,22 @@ final class MarkdownTheme {
         return style
     }
 
-    /// The width of a line's leading syntax in the body font, tabs included.
-    private func width(of prefix: String) -> CGFloat {
-        if let width = prefixWidths[prefix] { return width }
-        let measured = NSAttributedString(string: prefix, attributes: [
+    /// The width of a line's leading syntax in the body font, tabs included
+    /// — its marker (the first character past the indentation) in
+    /// `markerFont`, if given.
+    private func width(of prefix: String, markerFont: NSFont? = nil) -> CGFloat {
+        let key = markerFont == nil ? prefix : "\u{1}" + prefix
+        if let width = prefixWidths[key] { return width }
+        let measuring = NSMutableAttributedString(string: prefix, attributes: [
             .font: bodyFont, .paragraphStyle: paragraphStyle(),
-        ]).size().width.rounded(.up)
+        ])
+        if let markerFont, let marker = prefix.utf16.firstIndex(where: { $0 != 0x20 && $0 != 0x09 }) {
+            let location = prefix.utf16.distance(from: prefix.utf16.startIndex, to: marker)
+            measuring.addAttribute(.font, value: markerFont, range: NSRange(location: location, length: 1))
+        }
+        let measured = measuring.size().width.rounded(.up)
         if prefixWidths.count > 500 { prefixWidths.removeAll() } // prefixes repeat; this never really grows
-        prefixWidths[prefix] = measured
+        prefixWidths[key] = measured
         return measured
     }
 

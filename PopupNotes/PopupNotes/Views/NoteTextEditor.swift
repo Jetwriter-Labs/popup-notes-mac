@@ -13,6 +13,9 @@ import PopupNotesCore
 /// it's typed (see `MarkdownTextView`) and keeps `outline` current.
 struct NoteTextEditor: NSViewRepresentable {
     @Binding var text: String
+    /// Called after each edit — not when a toggle opens or closes, which
+    /// changes the text but isn't an edit.
+    var onEdit: () -> Void = {}
     /// Changing it puts keyboard focus in the editor (caret kept) — for when
     /// no new editor is created to take focus itself.
     var focusRequest = 0
@@ -53,28 +56,28 @@ struct NoteTextEditor: NSViewRepresentable {
         scrollView.contentInsets = NSEdgeInsets()
 
         context.coordinator.attach(textView, in: scrollView, outline: outline)
-        textView.string = text // styled as it goes in
+        // Styled as it goes in; caret at the end (or above folded lines there).
+        textView.setText(text)
 
-        // Caret at end, focused, once the view is in a window.
-        let end = NSRange(location: (text as NSString).length, length: 0)
-        textView.setSelectedRange(end)
+        // Focused, once the view is in a window.
         if takesFocusOnAppear {
             Task { @MainActor in
                 textView.window?.makeFirstResponder(textView)
-                textView.scrollRangeToVisible(end)
+                textView.scrollRangeToVisible(textView.selectedRange())
             }
         }
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
+        guard let textView = scrollView.documentView as? MarkdownTextView else { return }
+        context.coordinator.onEdit = onEdit
         // Only overwrite when the model genuinely diverged (e.g. import), so we
         // never clobber the user's caret/selection while they type. That
         // replacement isn't undoable, and the earlier undo entries now point
         // at ranges that may not exist (⌘Z would throw), so drop them.
         if textView.string != text {
-            textView.string = text
+            textView.setText(text)
             context.coordinator.undoManager.removeAllActions()
         }
         if focusRequest != context.coordinator.focusRequest {
@@ -83,10 +86,11 @@ struct NoteTextEditor: NSViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text, focusRequest: focusRequest) }
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, onEdit: onEdit, focusRequest: focusRequest) }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         private let text: Binding<String>
+        var onEdit: () -> Void
         var focusRequest: Int
         /// This editor's own undo history. Without it every editor shares the
         /// panel window's undo manager, so ⌘Z could reach into the history of
@@ -96,8 +100,9 @@ struct NoteTextEditor: NSViewRepresentable {
         private var outline: NoteOutline?
         private var outlineUpdateScheduled = false
 
-        init(text: Binding<String>, focusRequest: Int) {
+        init(text: Binding<String>, onEdit: @escaping () -> Void, focusRequest: Int) {
             self.text = text
+            self.onEdit = onEdit
             self.focusRequest = focusRequest
         }
 
@@ -119,8 +124,9 @@ struct NoteTextEditor: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
+            guard let textView = notification.object as? MarkdownTextView else { return }
             text.wrappedValue = textView.string
+            if !textView.isFolding { onEdit() }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {

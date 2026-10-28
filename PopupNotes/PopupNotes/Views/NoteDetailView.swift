@@ -3,7 +3,7 @@ import PopupNotesCore
 
 /// The editor for the selected note, with its outline beside it once the
 /// note has headings. Editing the text bumps `modified` so the note
-/// re-sorts to the top of the sidebar.
+/// re-sorts to the top of the sidebar; opening or closing a toggle doesn't.
 struct NoteDetailView: View {
     @Bindable var note: Note
     /// Changing it moves keyboard focus into the editor (see NotesView.newNote).
@@ -17,10 +17,8 @@ struct NoteDetailView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            NoteTextEditor(text: Binding(
-                get: { note.text },
-                set: { note.text = $0; note.modified = .now }
-            ), focusRequest: focusRequest, takesFocusOnAppear: takesFocus, outline: outline)
+            NoteTextEditor(text: $note.text, onEdit: { note.modified = .now },
+                           focusRequest: focusRequest, takesFocusOnAppear: takesFocus, outline: outline)
             // The detail column's 52pt top toolbar strip is empty (controls live in
             // the sidebar), so let the editor fill it and start the text at the top.
             // Top only — the bottom safe area carries the onboarding strip (see NotesView).

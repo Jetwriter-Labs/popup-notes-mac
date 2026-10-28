@@ -6,16 +6,42 @@ import PopupNotesCore
 /// blocks, a bar beside quotes and a line for rules, and adds the keys that
 /// make Markdown easy to write: Return continues a list, Tab and Shift-Tab
 /// nest it, ⌘B and ⌘I wrap the selection, and a click on a task's box
-/// checks it off.
+/// checks it off. Toggles, as in Notion: `>` and a space start one; a click
+/// on its arrow or ⌘↩ opens or closes it, ⌥⌘T all of them. The lines a
+/// closed toggle folds away aren't laid out, and the caret never lands in
+/// them.
 final class MarkdownTextView: NSTextView {
     let styler = MarkdownStyler()
+    /// Set while toggles open or close. That isn't an edit: no undo step,
+    /// and the note doesn't count as changed.
+    private(set) var isFolding = false
+    /// Set while one of the Markdown keys makes its edit, which keeps what
+    /// it wants folded — the lines a joined line skips over — folded.
+    private var isApplying = false
+    /// `styler.editCount` as of the last selection change. When it has moved
+    /// on, the next selection change comes with an edit.
+    private var selectionEditCount = 0
+    /// What the latest edit changed, until the toggles over it are opened.
+    private var unrevealedEdit: NSRange?
+    private var revealIsScheduled = false
 
     /// A TextKit 2 text view with its styler attached — before any text is
     /// set, so all of it gets styled.
     static func make() -> MarkdownTextView {
         let textView = MarkdownTextView(usingTextLayoutManager: true)
         textView.textStorage?.delegate = textView.styler
+        textView.textContentStorage?.delegate = textView.styler
+        textView.styler.didEdit = { [weak textView] range in textView?.didEdit(range) }
         return textView
+    }
+
+    /// Replaces the whole text — a note opened, or changed from outside —
+    /// with the caret at the end, or above the folded lines that hide it.
+    /// Its closed toggles stay closed.
+    func setText(_ string: String) {
+        self.string = string
+        unrevealedEdit = nil
+        setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
     }
 
     private var theme: MarkdownTheme { styler.theme }
@@ -46,33 +72,84 @@ final class MarkdownTextView: NSTextView {
         apply(edit)
     }
 
-    /// ⌘B and ⌘I. Key equivalents go to every view in the window, so only
-    /// while this view has focus.
+    /// Typing `>` and a space at the start of a line makes it a toggle — as
+    /// an undo step of its own, so ⌘Z brings back the `> ` for a quote.
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        super.insertText(string, replacementRange: replacementRange)
+        guard (string as? String ?? (string as? NSAttributedString)?.string) == " ",
+              let edit = MarkdownEditing.toggleShortcut(in: styler.text, selection: selectedRange()) else { return }
+        apply(edit)
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        guard let edit = MarkdownEditing.deleteBackward(in: styler.text, selection: selectedRange()) else {
+            super.deleteBackward(sender)
+            return
+        }
+        apply(edit)
+    }
+
+    override func deleteForward(_ sender: Any?) {
+        guard let edit = MarkdownEditing.deleteForward(in: styler.text, selection: selectedRange()) else {
+            super.deleteForward(sender)
+            return
+        }
+        apply(edit)
+    }
+
+    /// ⌘B and ⌘I; ⌘↩ and ⌥⌘T for toggles. Key equivalents go to every view
+    /// in the window, so only while this view has focus.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard event.type == .keyDown, window?.firstResponder === self, isEditable,
-              event.modifierFlags.intersection([.command, .shift, .option, .control]) == .command else {
+        guard event.type == .keyDown, window?.firstResponder === self, isEditable else {
             return super.performKeyEquivalent(with: event)
         }
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if modifiers == [.command, .option], key == "t" {
+            let edits = MarkdownToggles.foldAll(in: styler.lines)
+            guard !edits.isEmpty else { return super.performKeyEquivalent(with: event) }
+            setFolds(edits)
+            return true
+        }
+        guard modifiers == .command else { return super.performKeyEquivalent(with: event) }
         let marker: String
-        switch event.charactersIgnoringModifiers?.lowercased() {
+        switch key {
         case "b": marker = "**"
         case "i": marker = "*"
+        case "\r", "\u{3}": return toggleAtCaret() || super.performKeyEquivalent(with: event)
         default: return super.performKeyEquivalent(with: event)
         }
         apply(MarkdownEditing.toggle(marker, in: styler.text, selection: selectedRange()))
         return true
     }
 
-    /// A plain click on a task's box checks it off (or back on) without
-    /// moving the caret.
+    /// ⌘↩, as in Notion: checks off the task on the caret's line, or opens
+    /// or closes the toggle the caret is in. False when there's neither.
+    private func toggleAtCaret() -> Bool {
+        let caret = selectedRange().location
+        if let edit = MarkdownEditing.toggleTask(in: styler.text, at: caret) {
+            apply(edit)
+            return true
+        }
+        guard let toggle = MarkdownToggles.toggle(around: caret, in: styler.lines) else { return false }
+        flip(toggle)
+        return true
+    }
+
+    /// A plain click on a task's box checks it off (or back on), and one on
+    /// a toggle's arrow opens or closes it — without moving the caret.
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if event.clickCount == 1, isEditable,
-           event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
-           let box = taskBox(at: point),
-           let edit = MarkdownEditing.toggleTask(in: styler.text, at: box.location) {
-            apply(edit)
-            return
+           event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty {
+            if let box = taskBox(at: point), let edit = MarkdownEditing.toggleTask(in: styler.text, at: box.location) {
+                apply(edit)
+                return
+            }
+            if let toggle = toggleArrow(at: point) {
+                flip(toggle)
+                return
+            }
         }
         super.mouseDown(with: event)
     }
@@ -85,12 +162,26 @@ final class MarkdownTextView: NSTextView {
         return rect.insetBy(dx: -2, dy: -2).contains(point) ? box : nil
     }
 
+    /// The toggle whose arrow — its marker and the space after it — is at
+    /// `point`.
+    private func toggleArrow(at point: NSPoint) -> Int? {
+        let index = characterIndexForInsertion(at: point)
+        guard let lineIndex = MarkdownBlocks.lineIndex(containing: index, in: styler.lines) else { return nil }
+        let line = styler.lines[lineIndex]
+        guard case .toggle = line.block, let marker = line.marker,
+              let rect = boundingRect(for: NSRange(location: marker.location,
+                                                   length: NSMaxRange(line.prefix) - marker.location)) else { return nil }
+        return rect.insetBy(dx: -4, dy: 0).contains(point) ? lineIndex : nil
+    }
+
     /// Makes an edit the way typing would — undoable, with the delegate
     /// told — but as an undo step of its own: NSTextView would otherwise
     /// fold it into the typing before it, and ⌘Z after ⌘B would take the
     /// typing away too.
     func apply(_ edit: MarkdownEdit) {
         if edit.range.length > 0 || !edit.replacement.isEmpty {
+            isApplying = true
+            defer { isApplying = false }
             breakUndoCoalescing() // before shouldChangeText, which registers the undo
             guard shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
             textStorage?.replaceCharacters(in: edit.range, with: edit.replacement)
@@ -98,16 +189,122 @@ final class MarkdownTextView: NSTextView {
             breakUndoCoalescing()
         }
         if let selection = edit.selection {
+            // Never into folded lines: Tab can move a line under a closed toggle.
+            revealFolds(covering: selection)
             setSelectedRange(selection)
             scrollRangeToVisible(selection)
         }
     }
 
+    // MARK: - Toggles
+
+    /// Opens toggle `index` if it's closed, or closes it.
+    private func flip(_ index: Int) {
+        guard case .toggle(let isOpen) = styler.lines[index].block,
+              let edit = MarkdownToggles.fold(index, open: !isOpen, in: styler.lines) else { return }
+        setFolds([edit])
+    }
+
+    /// Opens or closes toggles by swapping their markers. That isn't an
+    /// edit: there is no undo step — the markers keep their length, so the
+    /// undo history still lines up — and the note doesn't count as
+    /// changed. A selection a closing toggle folds away moves up to its
+    /// title.
+    func setFolds(_ edits: [MarkdownEdit]) {
+        guard !edits.isEmpty, let storage = textStorage else { return }
+        let selection = selectedRange()
+        isFolding = true
+        undoManager?.disableUndoRegistration()
+        defer {
+            undoManager?.enableUndoRegistration()
+            isFolding = false
+        }
+        breakUndoCoalescing()
+        guard shouldChangeText(inRanges: edits.map { NSValue(range: $0.range) },
+                               replacementStrings: edits.map(\.replacement)) else { return }
+        storage.beginEditing()
+        for edit in edits { storage.replaceCharacters(in: edit.range, with: edit.replacement) }
+        storage.endEditing()
+        didChangeText()
+        let start = MarkdownToggles.visibleLocation(selection.location, forward: false, in: styler.lines)
+        let end = MarkdownToggles.visibleLocation(NSMaxRange(selection), forward: false, in: styler.lines)
+        let visible = NSRange(location: start, length: max(0, end - start))
+        setSelectedRange(visible)
+        if visible != selection { scrollRangeToVisible(visible) }
+    }
+
+    /// Opens the closed toggles over either end of each range.
+    private func revealFolds(covering ranges: NSRange...) {
+        let lines = styler.lines
+        let length = textStorage?.length ?? 0
+        var edits: [MarkdownEdit] = []
+        for range in ranges {
+            for location in [range.location, NSMaxRange(range)] where location <= length {
+                guard let index = MarkdownBlocks.lineIndex(containing: location, in: lines),
+                      lines[index].isHidden else { continue }
+                for edit in MarkdownToggles.reveal(index, in: lines) where !edits.contains(edit) { edits.append(edit) }
+            }
+        }
+        setFolds(edits)
+    }
+
+    /// Nothing an edit changes stays folded away — say ⌘Z brings back text
+    /// inside a closed toggle, or a typed tab moves a line under one: once
+    /// the edit is done, the toggles over it, and over the caret, open.
+    /// (The Markdown keys' own edits see to that themselves, in `apply`.)
+    private func didEdit(_ range: NSRange) {
+        guard !isFolding, !isApplying else { return }
+        unrevealedEdit = range
+        guard !revealIsScheduled else { return }
+        revealIsScheduled = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            revealIsScheduled = false
+            let edit = unrevealedEdit
+            unrevealedEdit = nil
+            revealFolds(covering: selectedRange(), edit ?? selectedRange())
+        }
+    }
+
+    // MARK: - Selection
+
+    /// Keeps the caret out of folded lines. After an edit — typing, ⌘Z — the
+    /// selection goes where the edit put it, and once the edit is done the
+    /// toggles over it open (see `didEdit`). Any other move — arrow keys, a
+    /// click past the end, code — steps over the folded lines instead:
+    /// forward to the line below them, back to the toggle's title.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        let afterEdit = styler.editCount != selectionEditCount
+        selectionEditCount = styler.editCount
+        guard !afterEdit else {
+            super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+            return
+        }
+        let lines = styler.lines
+        let old = selectedRange()
+        let visible = ranges.map { value -> NSValue in
+            let range = value.rangeValue
+            guard range.length > 0 else {
+                let forward = range.location > old.location
+                return NSValue(range: NSRange(location: MarkdownToggles.visibleLocation(range.location, forward: forward,
+                                                                                         in: lines), length: 0))
+            }
+            let start = MarkdownToggles.visibleLocation(range.location, forward: false, in: lines)
+            var end = MarkdownToggles.visibleLocation(NSMaxRange(range), forward: true, in: lines)
+            // Nothing shows below the folded lines: select through to the end.
+            if end < NSMaxRange(range) { end = textStorage?.length ?? end }
+            return NSValue(range: NSRange(location: start, length: end - start))
+        }
+        super.setSelectedRanges(visible, affinity: affinity, stillSelecting: stillSelecting)
+    }
+
     // MARK: - Navigation
 
     /// Brings a heading to the top of the editor with the caret at the end
-    /// of its line, so typing continues right there.
+    /// of its line, so typing continues right there — opening the toggles
+    /// it's folded away in.
     func reveal(_ heading: NSRange) {
+        revealFolds(covering: NSRange(location: heading.location, length: 0))
         window?.makeFirstResponder(self)
         let caret = NSRange(location: NSMaxRange(heading), length: 0)
         setSelectedRange(caret)
@@ -204,15 +401,19 @@ final class MarkdownTextView: NSTextView {
             let decoration = raw.flatMap(MarkdownTheme.Decoration.init(rawValue:))
             if decoration != .code { finishCodeBlock() }
 
-            let left = origin.x
-            let width = container.size.width
+            // Inside a toggle, a block starts where the toggle's lines do.
+            let indent = decoration == nil ? 0 : toggleIndent(at: offset)
+            let left = origin.x + indent
+            let width = container.size.width - indent
             switch decoration {
             case .code:
                 let line = NSRect(x: left, y: frame.minY, width: width, height: frame.height)
                 codeBlock = codeBlock?.union(line) ?? line
             case .quote:
                 theme.quoteBar.setFill()
-                let bar = NSRect(x: left + container.lineFragmentPadding, y: frame.minY + 1,
+                // A quote in a toggle starts right at its lines' indent: the bar goes before it.
+                let barLeft = origin.x + max(0, indent - theme.quoteInset)
+                let bar = NSRect(x: barLeft + container.lineFragmentPadding, y: frame.minY + 1,
                                  width: 3, height: frame.height - 2)
                 NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
             case .rule:
@@ -225,5 +426,14 @@ final class MarkdownTextView: NSTextView {
             return true
         }
         finishCodeBlock()
+    }
+
+    /// Where the toggle holding the line at `offset` starts its lines; 0
+    /// outside toggles.
+    private func toggleIndent(at offset: Int) -> CGFloat {
+        let lines = styler.lines
+        guard let index = MarkdownBlocks.lineIndex(containing: offset, in: lines),
+              let toggle = MarkdownToggles.parent(of: index, in: lines) else { return 0 }
+        return theme.toggleContentIndent(prefix: styler.text.string(in: lines[toggle].prefix))
     }
 }

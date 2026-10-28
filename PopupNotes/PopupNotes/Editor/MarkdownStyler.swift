@@ -5,16 +5,25 @@ import PopupNotesCore
 /// Markdown — that's what is saved and exported — and this only sets how it
 /// looks. After every edit it re-reads the note's lines (cheap: only line
 /// starts are inspected) and restyles just the lines the edit touched, plus
-/// any further down whose meaning changed with it, as when typing ```
-/// turns the lines below into code.
+/// any elsewhere whose meaning changed with it, as when typing ``` turns
+/// the lines below into code, or closing a toggle folds its lines away.
+/// Folded lines are marked, and — as the text content storage's delegate —
+/// it keeps TextKit from laying them out.
 final class MarkdownStyler: NSObject {
     let theme: MarkdownTheme
     /// The note's lines as of the last edit.
     private(set) var lines: [MarkdownLine] = []
     private(set) var text = MarkdownText("")
+    /// How many edits have been restyled: the text view tells a selection
+    /// change that comes with an edit from one that doesn't by it.
+    private(set) var editCount = 0
     /// After each restyle; `true` when a code block, quote or rule (whose
-    /// backgrounds the text view draws) appeared, changed or went away.
+    /// backgrounds the text view draws) appeared, changed or went away, or
+    /// lines were folded away or came back.
     var didRestyle: ((_ decorationsChanged: Bool) -> Void)?
+    /// After each edit — typed, undone, made in code — with the range it
+    /// changed. The text view's own hook; `didRestyle` is its owner's.
+    var didEdit: ((_ editedRange: NSRange) -> Void)?
 
     init(theme: MarkdownTheme = .shared) {
         self.theme = theme
@@ -29,12 +38,15 @@ final class MarkdownStyler: NSObject {
         storage.endEditing()
         self.lines = lines
         self.text = text
+        editCount += 1
+        didEdit?(editedRange)
         didRestyle?(decorationsChanged)
     }
 
-    /// Every line the edit touched, and past it, any line whose kind changed
-    /// (a fence opened or closed above it). Lines are compared with the last
-    /// edit's: past the edit, the text is the same, just shifted by `delta`.
+    /// Every line the edit touched, and elsewhere, any line whose kind
+    /// changed (a fence opened or closed above it) or that was folded away
+    /// or came back. Lines are compared with the last edit's: before the
+    /// edit, the text is the same; past it, the same but shifted by `delta`.
     private func changedLines(_ new: [MarkdownLine], editedRange: NSRange,
                               delta: Int) -> (indices: [Int], decorationsChanged: Bool) {
         let old = lines
@@ -49,7 +61,14 @@ final class MarkdownStyler: NSObject {
         }
         var o = 0
         for (index, line) in new.enumerated() {
-            if NSMaxRange(line.fullRange) < editedRange.location { continue }
+            if NSMaxRange(line.fullRange) < editedRange.location {
+                // Blank lines above the edit go with the line below them.
+                if index < old.count, old[index].isHidden != line.isHidden {
+                    changed.append(index)
+                    decorationsChanged = true
+                }
+                continue
+            }
             if line.range.location <= editEnd {
                 changed.append(index)
                 decorationsChanged = decorationsChanged || line.block.isDecorated
@@ -57,10 +76,11 @@ final class MarkdownStyler: NSObject {
             }
             let oldStart = line.range.location - delta
             while o < old.count, old[o].range.location < oldStart { o += 1 }
-            if o < old.count, old[o].range.location == oldStart, old[o].block == line.block { continue }
+            let matches = o < old.count && old[o].range.location == oldStart
+            if matches, old[o].block == line.block, old[o].isHidden == line.isHidden { continue }
             changed.append(index)
             decorationsChanged = decorationsChanged || line.block.isDecorated
-                || (o < old.count && old[o].block.isDecorated)
+                || (o < old.count && old[o].block.isDecorated) || (matches && old[o].isHidden != line.isHidden)
         }
         return (changed, decorationsChanged)
     }
@@ -72,9 +92,14 @@ final class MarkdownStyler: NSObject {
         var attributes = theme.baseAttributes
         var size = theme.bodyFont.pointSize
         var weight = NSFont.Weight.regular
+        var toggleKern: CGFloat = 0
         switch line.block {
         case .blank, .paragraph, .listItem:
             break
+        case .toggle:
+            let indent = theme.toggleTitleIndent(prefix: text.string(in: line.prefix))
+            toggleKern = indent.kern
+            attributes[.paragraphStyle] = indent.paragraphStyle
         case .heading(let level):
             let font = theme.headingFont(level: level)
             size = font.pointSize
@@ -102,6 +127,7 @@ final class MarkdownStyler: NSObject {
         default:
             break
         }
+        if line.isHidden { attributes[.markdownHidden] = true }
         storage.setAttributes(attributes, range: full)
 
         switch line.block {
@@ -119,6 +145,13 @@ final class MarkdownStyler: NSObject {
             }
         case .quote:
             if let marker = line.marker { storage.addAttribute(.foregroundColor, value: theme.syntaxColor, range: marker) }
+        case .toggle:
+            if let marker = line.marker {
+                storage.addAttributes([.foregroundColor: theme.listMarkerColor, .font: theme.toggleMarkerFont], range: marker)
+            }
+            if toggleKern > 0 {
+                storage.addAttribute(.kern, value: toggleKern, range: NSRange(location: NSMaxRange(line.prefix) - 1, length: 1))
+            }
         default:
             break
         }
@@ -187,12 +220,25 @@ extension MarkdownStyler: NSTextStorageDelegate {
     }
 }
 
+extension MarkdownStyler: NSTextContentStorageDelegate {
+    /// Lines a closed toggle folds away aren't laid out at all: TextKit
+    /// skips the paragraphs turned down here and lays out the rest as if
+    /// they weren't there. Restyling a line re-asks. Nonisolated: it reads
+    /// only the paragraph, so it's safe on whatever thread TextKit asks.
+    nonisolated func textContentManager(_ textContentManager: NSTextContentManager,
+                                        shouldEnumerate textElement: NSTextElement,
+                                        options: NSTextContentManager.EnumerationOptions) -> Bool {
+        guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else { return true }
+        return paragraph.attributedString.attribute(.markdownHidden, at: 0, effectiveRange: nil) == nil
+    }
+}
+
 extension MarkdownBlock {
     /// Has a background the text view draws.
     var isDecorated: Bool {
         switch self {
         case .fence, .code, .quote, .rule: true
-        case .blank, .paragraph, .heading, .listItem: false
+        case .blank, .paragraph, .heading, .listItem, .toggle: false
         }
     }
 }
