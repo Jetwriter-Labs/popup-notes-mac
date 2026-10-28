@@ -20,6 +20,9 @@ without breaking flow — no Dock icon, no window juggling, no cloud.
   links, bullet / numbered / task lists, quotes and code blocks. Lists carry
   on when you press Return, Tab nests them, `⌘B` / `⌘I` work, and a click
   checks off a task. Notes stay plain Markdown text.
+- **Toggles, as in Notion** — type `>` and a space for a collapsible block:
+  a title with whatever you indent under it. Click its arrow or press `⌘↩`
+  to fold the details away; `⌥⌘T` opens or closes them all.
 - **Sticky outline** — a note with headings gets a table of contents beside
   it that stays put while you scroll, shows where you are, and jumps to a
   heading on click. `⌃⌘O` shows or hides it.
