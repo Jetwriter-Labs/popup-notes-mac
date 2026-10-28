@@ -5,9 +5,10 @@ import PopupNotesCore
 
 /// Click-to-record control for the global shortcut. While recording, a local
 /// key monitor captures the next keystroke typed in this window; Esc cancels.
-/// Combos must include ⌘ or ⌃ (Option-only combos are broken with
-/// `RegisterEventHotKey` on macOS 15+, see `HotKeyCombo.isValidGlobalHotKey`),
-/// and ⌘ alone is refused because it would take that shortcut from every app.
+/// Any combo with ⌘, ⌃ or ⌥, or an F-key, is the user's to pick, even one
+/// another app uses (see `HotKeyCombo.isValidGlobalHotKey` for the rest).
+/// A shortcut macOS or another app grabs first never reaches the monitor;
+/// the recorder notices and says so instead of waiting silently.
 struct HotKeyRecorderView: View {
     /// Applies the combo (re-registering the Carbon hotkey); false = rejected.
     let apply: (HotKeyCombo) -> Bool
@@ -15,6 +16,8 @@ struct HotKeyRecorderView: View {
     @State private var isRecording = false
     @State private var monitor: Any?
     @State private var feedback: String?
+    /// ⌘, ⌃ or ⌥ went down while recording and no key has arrived since.
+    @State private var awaitingKey = false
     private var hotKey: HotKeyStatus { .shared }
 
     private var message: String? {
@@ -53,16 +56,23 @@ struct HotKeyRecorderView: View {
 
     private func startRecording() {
         feedback = nil
+        awaitingKey = false
         isRecording = true
         // A local monitor sees keystrokes for EVERY window of the app, the
         // notes panel included. Only keys typed in the recorder's own window
         // (key, since its button was just clicked) are a recording; anything
         // else ends the recording and goes through untouched — otherwise
         // typing in a note would vanish, and ⌘V there would become the
-        // system-wide hotkey. A nil window never matches.
+        // system-wide hotkey. A nil window never matches. Modifier changes
+        // always go through; the recorder only watches its own.
         let recorderWindow = NSApp.keyWindow
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak recorderWindow] event in
-            guard let recorderWindow, event.window === recorderWindow else {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak recorderWindow] event in
+            let inRecorder = recorderWindow != nil && event.window === recorderWindow
+            if event.type == .flagsChanged {
+                if inRecorder { modifiersChanged(event.modifierFlags) }
+                return event
+            }
+            guard inRecorder else {
                 stopRecording()
                 return event
             }
@@ -74,22 +84,34 @@ struct HotKeyRecorderView: View {
     private func stopRecording() {
         if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         isRecording = false
+        awaitingKey = false
     }
 
     private func handle(_ event: NSEvent) {
+        awaitingKey = false
         if event.keyCode == 53 { feedback = nil; stopRecording(); return } // Esc cancels
         let candidate = HotKeyCombo(keyCode: UInt32(event.keyCode),
                                     modifiers: KeyModifiers(event.modifierFlags))
-        guard !candidate.usesCommandAlone else {
-            feedback = "\(candidate.displayString) would stop working in every other app. Add ⌃, ⌥ or ⇧."
-            return
-        }
         guard candidate.isValidGlobalHotKey else {
-            feedback = "Include ⌘ or ⌃ in the shortcut."
+            feedback = "Add ⌘, ⌃ or ⌥ — only F-keys work without them."
             return
         }
         stopRecording()
         commit(candidate)
+    }
+
+    /// A shortcut macOS or another app owns (⌃Space while it switches input
+    /// sources, say) is taken before it reaches any window: only its
+    /// modifiers arrive. So ⌘, ⌃ or ⌥ going down, then all coming back up
+    /// with no key in between, means the key was taken on the way.
+    private func modifiersChanged(_ flags: NSEvent.ModifierFlags) {
+        if !KeyModifiers(flags).isDisjoint(with: [.command, .control, .option]) {
+            awaitingKey = true
+        } else if awaitingKey {
+            awaitingKey = false
+            feedback = "That shortcut never reached Popup Notes — macOS or another app is using it. "
+                + "Turn it off in System Settings ▸ Keyboard ▸ Keyboard Shortcuts (or in that app), then try again."
+        }
     }
 
     private func commit(_ candidate: HotKeyCombo) {

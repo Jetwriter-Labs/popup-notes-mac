@@ -30,18 +30,27 @@ public struct HotKeyCombo: Sendable, Equatable {
     /// Carbon modifier bitmask for `RegisterEventHotKey`.
     public var carbonModifierFlags: UInt32 { modifiers.rawValue }
 
-    /// A safe global hotkey must include Command and/or Control. This rejects
-    /// the empty, Shift-only, Option-only, and Option+Shift combos — the last
-    /// two are documented broken with `RegisterEventHotKey` on macOS 15+.
+    /// Whether the combo can be a global hotkey: it needs ⌘, ⌃ or ⌥, or must
+    /// be an F-key. Beyond that the choice is the user's, even a combo another
+    /// app uses (⌘Space, ⌘V). What it refuses can't stand alone: for a
+    /// sandboxed app macOS refuses plain and ⇧-only typing keys (letters,
+    /// digits, punctuation — `RegisterEventHotKey` returns `eventInternalErr`,
+    /// checked on macOS 26.7, where ⌥ and ⌥⇧ combos register again after
+    /// macOS 15.0 refused them), and a plain or ⇧-only Space, Tab, Return, ⌫
+    /// or arrow, which macOS would take, would leave that key dead in every
+    /// app (a stray Tab while recording would strand a keyboard user).
     public var isValidGlobalHotKey: Bool {
-        !modifiers.isDisjoint(with: [.command, .control])
+        !modifiers.isDisjoint(with: [.command, .control, .option]) || isFunctionKey
     }
 
-    /// ⌘ as the only modifier (⌘V, ⌘W, ⌘Q…). A global hotkey takes its combo
-    /// away from every app, so the recorder refuses these: one stray ⌘V while
-    /// recording would break paste system-wide. A saved combo like this still
-    /// registers at launch — only new recordings are refused.
-    public var usesCommandAlone: Bool { modifiers == [.command] }
+    /// F1–F20 type nothing, so they work as hotkeys on their own.
+    public var isFunctionKey: Bool { Self.functionKeyCodes.contains(keyCode) }
+
+    /// Carbon `kVK_F1`…`kVK_F20`.
+    private static let functionKeyCodes: Set<UInt32> = [
+        122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111,
+        105, 107, 113, 106, 64, 79, 80, 90,
+    ]
 }
 
 // MARK: - Persistence
@@ -96,5 +105,7 @@ extension HotKeyCombo {
         123: "←", 124: "→", 125: "↓", 126: "↑",
         122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6",
         98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12",
+        105: "F13", 107: "F14", 113: "F15", 106: "F16", 64: "F17", 79: "F18",
+        80: "F19", 90: "F20",
     ]
 }

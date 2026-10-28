@@ -100,7 +100,7 @@ Original architecture & scope rationale:
 | `MarkdownTextView` · `MarkdownStyler` · `MarkdownTheme` | The editor (`Editor/`): a TextKit 2 `NSTextView` whose text stays plain Markdown. The styler (text-storage delegate, `didProcessEditing` — never `willProcessEditing`, which misplaces the caret) restyles only the lines an edit changed; the view draws code-block/quote/rule backgrounds, continues lists on Return, nests with Tab/Shift-Tab, toggles ⌘B/⌘I (each its own undo step), checks task boxes on click, and scrolls to a heading. Never touch its `layoutManager` (falls back to TextKit 1). |
 | `NoteOutline` · `NoteOutlineView` | The sticky outline: `@Observable` headings + current section (caret's, or the top line's when the caret is off screen), kept current by the editor's coordinator; the pane lists them, highlights the current one, jumps on click. Shown with ≥ 2 headings while "Show Outline" (⋯ menu, ⌃⌘O, `showsOutline` default) is on and the detail is ≥ 420 pt wide. |
 | `OnboardingStripView` · `OnboardingDefaults` | Self-retiring bottom strip: hotkey hint (until first hotkey use or dismissal; failure variant when registration fails) + launch-at-login Enable/Not Now consent; one-time `UserDefaults` flags. |
-| `SettingsView` · `HotKeyRecorderView` · `SettingsButton` | `Settings` scene, two tabs — General: launch-at-login toggle (shows the real `SMAppService` status, "Open Login Items…" when approval is needed), "Show in Menu Bar" toggle (how to reach the panel without the icon; on macOS 26 always "Open Menu Bar Settings…", since the system's own switch can hide it unreported), global-shortcut recorder (persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. `SettingsButton` is the one "Settings…" path (panel ⋯ menu, strip, menu bar, ⌘,): it hides the floating panel and activates the app first. |
+| `SettingsView` · `HotKeyRecorderView` · `SettingsButton` | `Settings` scene, two tabs — General: launch-at-login toggle (shows the real `SMAppService` status, "Open Login Items…" when approval is needed), "Show in Menu Bar" toggle (how to reach the panel without the icon; on macOS 26 always "Open Menu Bar Settings…", since the system's own switch can hide it unreported), global-shortcut recorder (any combo with ⌘, ⌃ or ⌥, or an F-key; persisted by `HotKeyStore`), JSON export/import; About: local-only/no-analytics statement, GitHub + jetwriter.ai links. `SettingsButton` is the one "Settings…" path (panel ⋯ menu, strip, menu bar, ⌘,): it hides the floating panel and activates the app first. |
 | `Note` (`@Model`) · `NotesRepository` · `NoteSelection` | SwiftData model (id, text, created, modified; first-line `title` and `preview` read without Markdown syntax, `isBlank`, `isAlive`) + CRUD and newer-wins `importNotes` (one fetch, throws rather than treating a failed fetch as empty); neighbor-on-delete rule. In `PopupNotesCore`. |
 | `NotesJSON` · `ExportedNote` · `LegacyScratchpad` | JSON export/import codec + DTO; one-time legacy-scratchpad import; `WelcomeNote` seeded first-run note content (Markdown, so its headings fill the outline). In `PopupNotesCore`. |
 | `MarkdownBlocks` · `MarkdownInline` · `MarkdownOutline` · `MarkdownEditing` | Dependency-free Markdown in UTF-16 `NSRange`s: line kinds (headings, lists, tasks, quotes, fences, rules), inline spans (CommonMark emphasis rules, code, links, bare URLs), the heading outline, and pure edits for Return/Tab/⌘B/⌘I/tasks. In `PopupNotesCore`. |
@@ -186,7 +186,10 @@ launch-at-login enabled, log out and back in: the app must come up in the
 menu bar **silently**, no panel (this is the one path `open -a` cannot
 exercise — it needs a real login). Open
 **Settings (⌘,)**, record a new shortcut and confirm the hint (after
-resetting only its flags) mirrors it; try export/import; test once over a
+resetting only its flags) mirrors it. ⌘Space records (with Spotlight's
+shortcut off it then opens the panel); with macOS's ⌃Space input-source
+shortcut on, pressing ⌃Space while recording says the shortcut never
+reached Popup Notes. Try export/import; test once over a
 full-screen app. Menu bar icon: turn **Show in Menu Bar** off and on — the
 icon goes and comes back, the app keeps running. Then switch Popup Notes
 off under System Settings ▸ Menu Bar ▸ Allow in the Menu Bar (macOS 26):
@@ -197,8 +200,19 @@ on, turn Show in Menu Bar on again, and the icon returns.
 
 ## Key gotchas / constraints
 
-- **Hotkey modifiers:** Option-only and Option+Shift combos are broken with
-  `RegisterEventHotKey` on macOS 15+. Don't use them for the default.
+- **Hotkey modifiers** (probed sandboxed on macOS 26.7): `RegisterEventHotKey`
+  refuses plain and ⇧-only typing keys (letters, digits, punctuation) with
+  `eventInternalErr` (-9868). ⌥ and ⌥⇧ combos register again: macOS 15.0
+  refused them, 15.2 relented. F-keys register on their own. So do a plain
+  Space, Tab, Return or arrow, which the recorder refuses because they'd go
+  dead in every app. Any combo with ⌘, ⌃ or ⌥ is the user's choice, even
+  ⌘Space or ⌘V: don't add rules that second-guess it.
+- **A registered hotkey can still be unreachable:** an enabled macOS shortcut
+  takes the keystroke first, before any app sees it (⌃Space is "Select the
+  previous input source" by default, ⌘Space is Spotlight). Registration
+  still succeeds, so nothing can detect this at registration time. The
+  recorder sees the modifiers come and go with no key in between, and says
+  so instead of waiting silently.
 - **Panel focus handoff** is the trickiest detail: the panel is *non-activating*
   yet must become key to receive typing, then return focus to the prior app on
   dismiss. Verify the exact `NSApp.activate` / first-responder sequence against
