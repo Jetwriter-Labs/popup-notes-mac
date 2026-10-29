@@ -14,8 +14,9 @@ without breaking flow — no Dock icon, no window juggling, no cloud.
   without deactivating it, and focus returns the moment you dismiss.
 - **Menu bar icon optional** — turn it off in Settings (or under System
   Settings ▸ Menu Bar); the hotkey and Spotlight still open your notes.
-- **Multiple notes** — a sidebar lists every note, titled by its first line.
-  `⌘N` for a new one.
+- **Multiple notes** — each with a title in its own field above the text
+  (Return moves on to the text); the sidebar lists them by title, or an
+  untitled note by its first line. `⌘N` for a new one.
 - **Markdown, styled as you type** — headings, **bold**, *italic*, `code`,
   links, bullet / numbered / task lists, quotes and code blocks. Lists carry
   on when you press Return, Tab nests them, `⌘B` / `⌘I` work, and a click
