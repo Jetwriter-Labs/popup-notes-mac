@@ -1,16 +1,14 @@
-/// Generates the seeded first-run "Welcome" note. Pure text; the first line
-/// doubles as the note's sidebar title (see `NoteTitle`), which itself
-/// demonstrates the title-from-first-line rule to the new user. Written in
-/// Markdown, so it shows off the styling, and its headings fill the outline.
+/// The seeded first-run "Welcome" note: a title, and text in Markdown, so it
+/// shows off the styling, and its headings fill the outline.
 public enum WelcomeNote {
+    public static let title = "Welcome to Popup Notes 👋"
+
     public static func text(hotKeyDisplay: String) -> String {
         """
-        # Welcome to Popup Notes 👋
-
         Press \(hotKeyDisplay) in any app to open this panel — Esc, ⌘W or a click outside dismisses it.
 
         ## Basics
-        - The first line of a note is its title in the sidebar.
+        - A note's title goes in the field at the top; Return moves on to the text below.
         - ⌘N makes a new note · right-click a note to delete it.
         - Notes save automatically and live only on this Mac.
         - Settings (⌘,): change the shortcut, launch at login, export your notes.

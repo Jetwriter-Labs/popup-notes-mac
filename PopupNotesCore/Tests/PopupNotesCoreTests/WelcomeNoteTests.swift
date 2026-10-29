@@ -10,10 +10,9 @@ import Foundation
         #expect(WelcomeNote.text(hotKeyDisplay: "⌥⌘J").contains("⌥⌘J"))
     }
 
-    @Test func firstLineBecomesTheWelcomeTitle() {
-        let text = WelcomeNote.text(hotKeyDisplay: "⌃⌘N")
-        #expect(text.hasPrefix("# Welcome to Popup Notes 👋\n"))
-        #expect(NoteTitle.title(from: text) == "Welcome to Popup Notes 👋")
+    @Test func hasATitleOfItsOwn() {
+        #expect(WelcomeNote.title == "Welcome to Popup Notes 👋")
+        #expect(!WelcomeNote.text(hotKeyDisplay: "⌃⌘N").contains("Welcome to Popup Notes"))
     }
 
     @Test func showsAClosedToggleToOpen() {
@@ -25,17 +24,17 @@ import Foundation
     @Test func headingsFillTheOutline() {
         let headings = MarkdownOutline.headings(in: WelcomeNote.text(hotKeyDisplay: "⌃⌘N"))
         #expect(headings.count >= 2)
-        #expect(headings.first?.title == "Welcome to Popup Notes 👋")
+        #expect(headings.first?.title == "Basics")
     }
 
     @Test func seedingCreatesExactlyOneWelcomeNote() throws {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: Note.self, configurations: config)
         let repo = NotesRepository(context: ModelContext(container))
-        repo.create(text: WelcomeNote.text(hotKeyDisplay: "⌃⌘N"))
+        repo.create(title: WelcomeNote.title, text: WelcomeNote.text(hotKeyDisplay: "⌃⌘N"))
         try repo.save()
         let all = repo.allSortedByModified()
         #expect(all.count == 1)
-        #expect(all.first.map { NoteTitle.title(from: $0.text) } == "Welcome to Popup Notes 👋")
+        #expect(all.first?.displayTitle == "Welcome to Popup Notes 👋")
     }
 }

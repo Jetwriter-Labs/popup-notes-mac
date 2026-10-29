@@ -96,4 +96,63 @@ import Testing
         let text = String(repeating: "t", count: NoteTitle.previewScanLimit + 10) + "\nsecond"
         #expect(NoteTitle.preview(from: text) == "")
     }
+
+    // MARK: A title of its own
+
+    @Test func aTitleNamesTheNoteAsTyped() {
+        #expect(NoteTitle.title("  Plan **B**  ", text: "# Something else") == "Plan **B**")
+    }
+
+    @Test func aBlankTitleFallsBackToTheFirstLine() {
+        #expect(NoteTitle.title(" \t", text: "# Groceries\nmilk") == "Groceries")
+        #expect(NoteTitle.title("", text: "") == "New Note")
+    }
+
+    @Test func aLongTitleIsCapped() {
+        #expect(NoteTitle.title(String(repeating: "t", count: 500), text: "").count == NoteTitle.maxLength)
+    }
+
+    @Test func underATitleThePreviewIsTheFirstLine() {
+        #expect(NoteTitle.preview(title: "Groceries", text: "\n- milk\n- eggs") == "milk")
+        #expect(NoteTitle.preview(title: "Groceries", text: "") == "")
+    }
+
+    @Test func untitledThePreviewSkipsTheLineThatNamesTheNote() {
+        #expect(NoteTitle.preview(title: "", text: "Groceries\n- milk") == "milk")
+    }
+
+    @Test func singleLineTurnsLineBreaksIntoSpaces() {
+        #expect(NoteTitle.singleLine("A\nB\r\nC\u{2028}D") == "A B C D")
+        #expect(NoteTitle.singleLine("Plain") == "Plain")
+    }
+
+    // MARK: Moving a first line into the title
+
+    @Test(arguments: [
+        ("# Plan\n\nbody", "Plan", "body"),
+        ("Groceries\nmilk", "Groceries", "milk"),
+        ("\n\n  ## Week 12 ##  \n \n\tindented stays\nmore", "Week 12", "\tindented stays\nmore"),
+        ("Only a title", "Only a title", ""),
+        ("Title\r\n\r\nCRLF body", "Title", "CRLF body"),
+        ("Welcome 👋\n- item", "Welcome 👋", "- item"),
+    ])
+    func splitMovesAHeadingOrPlainLine(_ text: String, title: String, rest: String) throws {
+        let split = try #require(NoteTitle.split(text))
+        #expect(split.title == title)
+        #expect(split.text == rest)
+    }
+
+    @Test(arguments: [
+        "- [ ] buy milk\nmore", "1. First\n2. Second", "> quoted", "▸ Toggle\n\tinside", "```\ncode\n```",
+        "---\nafter", "#\nbare hash", "**Bold** start", "[Docs](https://example.com) to read", "`make` fails",
+        "2*3*4 is 24", "", " \n\t\n",
+    ])
+    func splitLeavesWhatIsPartOfTheNote(_ text: String) {
+        #expect(NoteTitle.split(text) == nil)
+    }
+
+    @Test func splitLeavesAParagraphLongerThanATitle() {
+        let long = String(repeating: "word ", count: 40) + "\nbody"
+        #expect(NoteTitle.split(long) == nil)
+    }
 }

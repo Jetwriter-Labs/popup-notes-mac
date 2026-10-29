@@ -21,8 +21,8 @@ public final class NotesRepository {
     }
 
     @discardableResult
-    public func create(text: String = "") -> Note {
-        let note = Note(text: text)
+    public func create(title: String = "", text: String = "") -> Note {
+        let note = Note(title: title, text: text)
         context.insert(note)
         return note
     }
@@ -35,13 +35,15 @@ public final class NotesRepository {
 
     @discardableResult
     public func upsert(_ exported: ExportedNote) -> Note {
+        let (title, text) = exported.content
         if let existing = note(id: exported.id) {
-            existing.text = exported.text
+            existing.title = title
+            existing.text = text
             existing.created = exported.created
             existing.modified = exported.modified
             return existing
         }
-        let note = Note(id: exported.id, text: exported.text,
+        let note = Note(id: exported.id, title: title, text: text,
                         created: exported.created, modified: exported.modified)
         context.insert(note)
         return note
@@ -54,8 +56,10 @@ public final class NotesRepository {
     /// importing an old backup can't roll back edits made since. Export
     /// writes whole-second dates, so both sides are compared at one-second
     /// precision; a tie goes to the file (a hand-edited file still applies).
-    /// Identical text is left untouched. If an id appears twice in the file,
-    /// its last entry is used. Does not save.
+    /// An identical title and text are left untouched. If an id appears
+    /// twice in the file, its last entry is used. A file from before titles
+    /// has its notes' first lines moved into their titles, as upgrading
+    /// did. Does not save.
     public func importNotes(_ incoming: [ExportedNote]) throws -> ImportSummary {
         // Note.id isn't unique in the schema: keep the newest if it repeats.
         let local = Dictionary(try allNotes().map { ($0.id, $0) }, uniquingKeysWith: { newest, _ in newest })
@@ -68,16 +72,18 @@ public final class NotesRepository {
         var summary = ImportSummary()
         for id in order {
             guard let file = latest[id] else { continue }
+            let (title, text) = file.content
             guard let existing = local[id] else {
-                let note = Note(id: file.id, text: file.text, created: file.created, modified: file.modified)
+                let note = Note(id: file.id, title: title, text: text, created: file.created, modified: file.modified)
                 context.insert(note)
                 summary.added += 1
                 continue
             }
-            if existing.text == file.text {
+            if existing.title == title, existing.text == text {
                 summary.unchanged += 1
             } else if Self.wholeSeconds(file.modified) >= Self.wholeSeconds(existing.modified) {
-                existing.text = file.text
+                existing.title = title
+                existing.text = text
                 existing.created = file.created
                 existing.modified = file.modified
                 summary.updated += 1
@@ -86,6 +92,23 @@ public final class NotesRepository {
             }
         }
         return summary
+    }
+
+    /// Gives the notes from before titles one: the first line that named
+    /// each moves out of its text and into its title, where that can be
+    /// done without losing anything (see `NoteTitle.split`). Notes with a
+    /// title are left alone, and so is `modified` — this isn't an edit.
+    /// Returns how many notes got a title. Does not save.
+    @discardableResult
+    public func moveFirstLinesIntoTitles() throws -> Int {
+        var moved = 0
+        for note in try allNotes() where note.title.isEmpty {
+            guard let (title, text) = NoteTitle.split(note.text) else { continue }
+            note.title = title
+            note.text = text
+            moved += 1
+        }
+        return moved
     }
 
     private static func wholeSeconds(_ date: Date) -> Double {
