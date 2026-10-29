@@ -16,13 +16,23 @@ struct NoteTextEditor: NSViewRepresentable {
     /// Called after each edit — not when a toggle opens or closes, which
     /// changes the text but isn't an edit.
     var onEdit: () -> Void = {}
-    /// Changing it puts keyboard focus in the editor (caret kept) — for when
-    /// no new editor is created to take focus itself.
-    var focusRequest = 0
+    /// Changing it puts keyboard focus in the editor — for when no new
+    /// editor is created to take focus itself.
+    var focusRequest = FocusRequest()
     /// False when the user is working in the sidebar and must keep its focus.
     var takesFocusOnAppear = true
     /// Kept up to date with the note's headings; its jumps scroll this editor.
     var outline: NoteOutline?
+    /// When the caret leaves the text upward: ↑ on its first line, ⌫ at its
+    /// very start.
+    var onExitAtTop: () -> Void = {}
+
+    /// Asks for keyboard focus each time its `id` changes.
+    struct FocusRequest: Equatable {
+        var id = 0
+        /// The caret goes to the start of the text, rather than staying put.
+        var atStart = false
+    }
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = MarkdownTextView.make()
@@ -55,6 +65,7 @@ struct NoteTextEditor: NSViewRepresentable {
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets = NSEdgeInsets()
 
+        textView.onExitAtTop = { [weak coordinator = context.coordinator] in coordinator?.onExitAtTop() }
         context.coordinator.attach(textView, in: scrollView, outline: outline)
         // Styled as it goes in; caret at the end (or above folded lines there).
         textView.setText(text)
@@ -72,6 +83,7 @@ struct NoteTextEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? MarkdownTextView else { return }
         context.coordinator.onEdit = onEdit
+        context.coordinator.onExitAtTop = onExitAtTop
         // Only overwrite when the model genuinely diverged (e.g. import), so we
         // never clobber the user's caret/selection while they type. That
         // replacement isn't undoable, and the earlier undo entries now point
@@ -82,16 +94,24 @@ struct NoteTextEditor: NSViewRepresentable {
         }
         if focusRequest != context.coordinator.focusRequest {
             context.coordinator.focusRequest = focusRequest
-            Task { @MainActor in textView.window?.makeFirstResponder(textView) }
+            let atStart = focusRequest.atStart
+            Task { @MainActor in
+                if atStart { textView.setSelectedRange(NSRange(location: 0, length: 0)) }
+                textView.window?.makeFirstResponder(textView)
+                if atStart { textView.scrollRangeToVisible(textView.selectedRange()) }
+            }
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text, onEdit: onEdit, focusRequest: focusRequest) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onEdit: onEdit, onExitAtTop: onExitAtTop, focusRequest: focusRequest)
+    }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         private let text: Binding<String>
         var onEdit: () -> Void
-        var focusRequest: Int
+        var onExitAtTop: () -> Void
+        var focusRequest: FocusRequest
         /// This editor's own undo history. Without it every editor shares the
         /// panel window's undo manager, so ⌘Z could reach into the history of
         /// notes viewed earlier.
@@ -100,9 +120,11 @@ struct NoteTextEditor: NSViewRepresentable {
         private var outline: NoteOutline?
         private var outlineUpdateScheduled = false
 
-        init(text: Binding<String>, onEdit: @escaping () -> Void, focusRequest: Int) {
+        init(text: Binding<String>, onEdit: @escaping () -> Void, onExitAtTop: @escaping () -> Void,
+             focusRequest: FocusRequest) {
             self.text = text
             self.onEdit = onEdit
+            self.onExitAtTop = onExitAtTop
             self.focusRequest = focusRequest
         }
 

@@ -11,7 +11,7 @@ struct NotesView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Note.modified, order: .reverse) private var notes: [Note]
     @State private var selection: UUID?
-    /// Bumped to move the caret into the editor when ⌘N keeps the open blank note.
+    /// Bumped to move the caret into the title when ⌘N keeps the open blank note.
     @State private var focusRequest = 0
     /// The note selected by a delete made with ⌫ in the sidebar: its editor
     /// must not take focus, so the next ⌫ goes on acting on the list (a
@@ -69,7 +69,7 @@ struct NotesView: View {
         selection = remembered ?? notes.first?.id
     }
 
-    /// Always a fresh note, selected — its new editor takes focus.
+    /// Always a fresh note, selected — its title takes focus.
     private func insertNote() {
         let note = Note()
         context.insert(note)

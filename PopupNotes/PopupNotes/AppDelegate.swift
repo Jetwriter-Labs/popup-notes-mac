@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard storeError == nil else { presentStoreFailureAndQuit(); return }
         NSApp.setActivationPolicy(.accessory) // no Dock icon
         migrateLegacyIfNeeded()
+        moveFirstLinesIntoTitlesIfNeeded()
         let combo = HotKeyStore.saved
         hotKeyStatus.combo = combo
         hotKeyStatus.isRegistered = hotKey.register(combo) { [weak self] in self?.handleHotKeyFire() }
@@ -120,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // fetch failed.
         let repo = NotesRepository(context: container.mainContext)
         if let notes = try? repo.allNotes(), notes.isEmpty {
-            repo.create(text: WelcomeNote.text(hotKeyDisplay: hotKeyStatus.combo.displayString))
+            repo.create(title: WelcomeNote.title, text: WelcomeNote.text(hotKeyDisplay: hotKeyStatus.combo.displayString))
             container.mainContext.saveLoggingErrors("seeding the Welcome note")
         }
     }
@@ -155,6 +156,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let url = LegacyScratchpad.defaultURL(), let text = LegacyScratchpad.read(at: url) else { return }
         NotesRepository(context: container.mainContext).create(text: text)
         container.mainContext.saveLoggingErrors("migrating the legacy scratchpad")
+    }
+
+    /// One-time, for notes from before titles had a field of their own:
+    /// the first line that named each moves into its title, where nothing
+    /// is lost by it (see `NoteTitle.split`). Done only once it's saved — a
+    /// store that can't be read or saved now gets another go next launch,
+    /// which skips the notes that have a title by then.
+    private func moveFirstLinesIntoTitlesIfNeeded() {
+        let key = "didMoveFirstLinesIntoTitles"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let context = container.mainContext
+        do {
+            let moved = try NotesRepository(context: context).moveFirstLinesIntoTitles()
+            if context.hasChanges { try context.save() }
+            UserDefaults.standard.set(true, forKey: key)
+            Log.store.info("Gave \(moved) notes their first line as a title")
+        } catch {
+            Log.store.error("Couldn't give notes titles: \(String(reflecting: error), privacy: .public)")
+        }
     }
 
     /// The database exists but won't open (corrupt, unreadable, disk

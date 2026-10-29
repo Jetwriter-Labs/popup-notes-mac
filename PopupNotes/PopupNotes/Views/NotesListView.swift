@@ -2,10 +2,10 @@ import SwiftUI
 import AppKit
 import PopupNotesCore
 
-/// Sidebar: the list of notes (title, then date · preview), a New Note button,
-/// and an options menu (New Note, Show Outline, Settings, Quit). Delete — from
-/// the context menu, VoiceOver's actions, or ⌫ with the list focused — asks
-/// first unless the note is blank.
+/// Sidebar: the list of notes (title — or, untitled, the first line — then
+/// date · preview), a New Note button, and an options menu (New Note, Show
+/// Outline, Settings, Quit). Delete — from the context menu, VoiceOver's
+/// actions, or ⌫ with the list focused — asks first unless the note is blank.
 struct NotesListView: View {
     let notes: [Note]
     @Binding var selection: UUID?
@@ -84,7 +84,7 @@ struct NotesListView: View {
             if notes.count > 1 { onDelete(note, fromKeyboard) }
             return
         }
-        let title = note.title
+        let title = note.displayTitle
         let shown = title.count > 60 ? String(title.prefix(60)) + "…" : title
         pendingDelete = PendingDelete(id: note.id, prompt: "Delete “\(shown)”?", fromKeyboard: fromKeyboard)
     }
@@ -103,7 +103,7 @@ private struct NoteRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: note.title)
+            Text(verbatim: note.displayTitle)
                 .lineLimit(1)
                 .foregroundStyle(note.isBlank ? HierarchicalShapeStyle.secondary : .primary)
             // Re-evaluated every minute, so "5 min. ago" can't go stale while

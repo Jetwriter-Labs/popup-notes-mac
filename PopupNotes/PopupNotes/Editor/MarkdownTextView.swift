@@ -12,6 +12,9 @@ import PopupNotesCore
 /// them.
 final class MarkdownTextView: NSTextView {
     let styler = MarkdownStyler()
+    /// When the caret leaves the text upward — ↑ on its first line, ⌫ at
+    /// its very start — for the note's title above to take focus.
+    var onExitAtTop: (() -> Void)?
     /// Set while toggles open or close. That isn't an edit: no undo step,
     /// and the note doesn't count as changed.
     private(set) var isFolding = false
@@ -89,10 +92,40 @@ final class MarkdownTextView: NSTextView {
 
     override func deleteBackward(_ sender: Any?) {
         guard let edit = MarkdownEditing.deleteBackward(in: styler.text, selection: selectedRange()) else {
+            // At the very start, back up into the title — on a fresh press
+            // only: a held key mustn't go on to erase the title.
+            let isRepeat = NSApp.currentEvent.map { $0.type == .keyDown && $0.isARepeat } ?? false
+            if selectedRange() == NSRange(location: 0, length: 0), !isRepeat, let onExitAtTop {
+                onExitAtTop()
+                return
+            }
             super.deleteBackward(sender)
             return
         }
         apply(edit)
+    }
+
+    override func moveUp(_ sender: Any?) {
+        if let onExitAtTop, caretIsOnFirstLine {
+            onExitAtTop()
+            return
+        }
+        super.moveUp(sender)
+    }
+
+    /// Whether the caret is on the first line on screen, which ↑ leaves
+    /// for the title.
+    private var caretIsOnFirstLine: Bool {
+        let caret = selectedRange()
+        guard caret.length == 0, let first = styler.lines.first else { return false }
+        // Past the first paragraph's line break is another line.
+        guard first.terminatorLength == 0 || caret.location < NSMaxRange(first.fullRange) else { return false }
+        // A first paragraph that wraps: before its second line starts.
+        guard let layoutManager = textLayoutManager,
+              let fragment = layoutManager.textLayoutFragment(for: layoutManager.documentRange.location) else { return true }
+        layoutManager.ensureLayout(for: fragment.rangeInElement)
+        let lines = fragment.textLineFragments
+        return lines.count < 2 || caret.location < lines[0].characterRange.upperBound
     }
 
     override func deleteForward(_ sender: Any?) {
