@@ -223,13 +223,19 @@ extension MarkdownStyler: NSTextStorageDelegate {
 extension MarkdownStyler: NSTextContentStorageDelegate {
     /// Lines a closed toggle folds away aren't laid out at all: TextKit
     /// skips the paragraphs turned down here and lays out the rest as if
-    /// they weren't there. Restyling a line re-asks. Nonisolated: it reads
-    /// only the paragraph, so it's safe on whatever thread TextKit asks.
+    /// they weren't there. Restyling a line re-asks. TextKit asks about
+    /// every paragraph it walks past, many times a frame while scrolling, so
+    /// this reads the mark straight from the text storage — a paragraph's
+    /// `attributedString` is a fresh copy each time. Nonisolated: it reads
+    /// the text storage as TextKit itself does, on whatever thread it asks.
     nonisolated func textContentManager(_ textContentManager: NSTextContentManager,
                                         shouldEnumerate textElement: NSTextElement,
                                         options: NSTextContentManager.EnumerationOptions) -> Bool {
-        guard let paragraph = textElement as? NSTextParagraph, paragraph.attributedString.length > 0 else { return true }
-        return paragraph.attributedString.attribute(.markdownHidden, at: 0, effectiveRange: nil) == nil
+        guard let storage = (textContentManager as? NSTextContentStorage)?.textStorage,
+              let start = textElement.elementRange?.location else { return true }
+        let offset = textContentManager.offset(from: textContentManager.documentRange.location, to: start)
+        guard offset < storage.length else { return true }
+        return storage.attribute(.markdownHidden, at: offset, effectiveRange: nil) == nil
     }
 }
 

@@ -32,6 +32,12 @@ final class MarkdownTextView: NSTextView {
         textView.textStorage?.delegate = textView.styler
         textView.textContentStorage?.delegate = textView.styler
         textView.styler.didEdit = { [weak textView] range in textView?.didEdit(range) }
+        // Selected text keeps its own colors. The default also recolors it,
+        // and drawing that resolves the system colors anew for every run of
+        // text: dragging a selection redraws it at each autoscroll step, and
+        // that took two-thirds of the time. (An inactive selection still
+        // turns gray.)
+        textView.selectedTextAttributes = [.backgroundColor: NSColor.selectedTextBackgroundColor]
         return textView
     }
 
