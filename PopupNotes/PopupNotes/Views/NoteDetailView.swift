@@ -63,7 +63,7 @@ struct NoteDetailView: View {
     private var titleField: some View {
         TextField("Title", text: title, selection: $titleSelection, axis: .vertical)
             .textFieldStyle(.plain)
-            .font(.largeTitle.bold())
+            .font(Font(MarkdownTheme.shared.titleFont as CTFont))
             .lineLimit(1...4)
             .focused($titleIsFocused)
             .onSubmit(focusTextAtStart)
@@ -71,8 +71,8 @@ struct NoteDetailView: View {
             .onKeyPress(.tab) { focusTextAtStart(); return .handled }
             // Lines up with the text below (its inset plus line padding), and
             // a one-line title with the sidebar's toolbar buttons.
-            .padding(.leading, 13)
-            .padding(.trailing, 12)
+            .padding(.leading, NoteTextEditor.textInset.width + 5)
+            .padding(.trailing, NoteTextEditor.textInset.width + 4)
             .padding(.top, 10)
             .padding(.bottom, 2)
     }

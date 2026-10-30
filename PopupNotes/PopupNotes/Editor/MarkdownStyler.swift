@@ -94,7 +94,9 @@ final class MarkdownStyler: NSObject {
         var weight = NSFont.Weight.regular
         var toggleKern: CGFloat = 0
         switch line.block {
-        case .blank, .paragraph, .listItem:
+        case .blank:
+            attributes[.paragraphStyle] = theme.blankParagraphStyle
+        case .paragraph, .listItem:
             break
         case .toggle:
             let indent = theme.toggleTitleIndent(prefix: text.string(in: line.prefix))

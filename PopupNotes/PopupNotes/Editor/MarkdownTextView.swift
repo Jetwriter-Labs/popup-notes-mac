@@ -439,6 +439,14 @@ final class MarkdownTextView: NSTextView {
             NSBezierPath(roundedRect: block, xRadius: 6, yRadius: 6).fill()
             codeBlock = nil
         }
+        // One bar beside a run of quoted lines, across the space between them.
+        var quoteBar: NSRect?
+        func finishQuote() {
+            guard let bar = quoteBar else { return }
+            theme.quoteBar.setFill()
+            NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
+            quoteBar = nil
+        }
 
         layoutManager.enumerateTextLayoutFragments(from: firstVisible?.rangeInElement.location
                                                    ?? layoutManager.documentRange.location,
@@ -450,6 +458,7 @@ final class MarkdownTextView: NSTextView {
                 ? storage.attribute(.markdownDecoration, at: offset, effectiveRange: nil) as? Int : nil
             let decoration = raw.flatMap(MarkdownTheme.Decoration.init(rawValue:))
             if decoration != .code { finishCodeBlock() }
+            if decoration != .quote { finishQuote() }
 
             // Inside a toggle, a block starts where the toggle's lines do.
             let indent = decoration == nil ? 0 : toggleIndent(at: offset)
@@ -460,12 +469,12 @@ final class MarkdownTextView: NSTextView {
                 let line = NSRect(x: left, y: frame.minY, width: width, height: frame.height)
                 codeBlock = codeBlock?.union(line) ?? line
             case .quote:
-                theme.quoteBar.setFill()
                 // A quote in a toggle starts right at its lines' indent: the bar goes before it.
                 let barLeft = origin.x + max(0, indent - theme.quoteInset)
                 let bar = NSRect(x: barLeft + container.lineFragmentPadding, y: frame.minY + 1,
                                  width: 3, height: frame.height - 2)
-                NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
+                if let run = quoteBar, run.minX != bar.minX { finishQuote() }
+                quoteBar = quoteBar?.union(bar) ?? bar
             case .rule:
                 theme.ruleColor.setFill()
                 let pad = container.lineFragmentPadding
@@ -476,6 +485,7 @@ final class MarkdownTextView: NSTextView {
             return true
         }
         finishCodeBlock()
+        finishQuote()
     }
 
     /// Where the toggle holding the line at `offset` starts its lines; 0

@@ -23,6 +23,11 @@ final class MarkdownTheme {
 
     let bodyFont: NSFont
     let codeFont: NSFont
+    /// Lines a fifth taller than the font's own, and room after each
+    /// paragraph and list item, so a note reads as lines of text rather
+    /// than one dense block.
+    let lineHeightMultiple: CGFloat = 1.2
+    let paragraphSpacing: CGFloat = 6
     /// Where tabs stop: list nesting is done with tabs, so this is the
     /// width of one level.
     let tabInterval: CGFloat = 20
@@ -47,10 +52,16 @@ final class MarkdownTheme {
     private var fonts: [FontKey: NSFont] = [:]
     private var prefixWidths: [String: CGFloat] = [:]
 
-    init(bodySize: CGFloat = NSFont.preferredFont(forTextStyle: .body).pointSize) {
+    /// Body text two sizes up from the system's 13 pt, which suits a
+    /// control's label more than a note you read and write in.
+    init(bodySize: CGFloat = NSFont.preferredFont(forTextStyle: .body).pointSize + 2) {
         bodyFont = .systemFont(ofSize: bodySize)
         codeFont = .monospacedSystemFont(ofSize: (bodySize * 0.92).rounded(), weight: .regular)
     }
+
+    /// The note's title, in its field above the text: a step up from a `#`
+    /// heading, so it reads as the title rather than one more heading.
+    lazy var titleFont = font(size: (headingFont(level: 1).pointSize * 1.2).rounded(), weight: .bold)
 
     // MARK: Attributes
 
@@ -63,17 +74,21 @@ final class MarkdownTheme {
     ]
 
     func headingFont(level: Int) -> NSFont {
-        let scale: [CGFloat] = [1.6, 1.35, 1.15, 1, 1, 1]
+        let scale: [CGFloat] = [1.5, 1.3, 1.15, 1, 1, 1]
         let size = (bodyFont.pointSize * scale[min(max(level, 1), 6) - 1]).rounded()
         return font(size: size, weight: level <= 2 ? .bold : .semibold)
     }
 
     /// Air above headings sets sections apart — but not above the first
-    /// line, where it would only push the note's title down.
+    /// line, where it would only push the text away from the title. Less
+    /// below, so a heading sits with the lines it heads.
     func headingParagraphStyle(level: Int, isFirstLine: Bool) -> NSParagraphStyle {
-        let before: CGFloat = isFirstLine ? 0 : [8, 6, 4, 2, 2, 2][min(max(level, 1), 6) - 1]
-        return paragraphStyle(spacingBefore: before)
+        let before: CGFloat = isFirstLine ? 0 : [12, 10, 8, 6, 6, 6][min(max(level, 1), 6) - 1]
+        return paragraphStyle(spacingBefore: before, spacingAfter: 2, lineHeightMultiple: 1.1)
     }
+
+    /// An empty line is space enough: none added after it.
+    lazy var blankParagraphStyle = paragraphStyle(spacingAfter: 0)
 
     /// Wrapped lines of a list item or quote line up under its text, not
     /// under its marker. `prefix` is the line's leading syntax as typed.
@@ -88,13 +103,14 @@ final class MarkdownTheme {
     /// A toggle's title starts at the tab stop past its marker, where the
     /// lines indented under it start too: `kern` widens the space after the
     /// marker to reach it, and wrapped title lines line up there. The line
-    /// keeps the body text's height, bigger arrow and all.
+    /// keeps the body text's height, bigger arrow and all. (The height is
+    /// multiplied before it's held to that, so it's the multiplied one.)
     func toggleTitleIndent(prefix: String) -> (kern: CGFloat, paragraphStyle: NSParagraphStyle) {
         let prefixWidth = width(of: prefix, markerFont: toggleMarkerFont)
         let stop = (prefixWidth / tabInterval).rounded(.up) * tabInterval
         let style = paragraphStyle(headIndent: stop).mutableCopy() as! NSMutableParagraphStyle
-        style.minimumLineHeight = bodyLineHeight
-        style.maximumLineHeight = bodyLineHeight
+        style.minimumLineHeight = bodyLineHeight * lineHeightMultiple
+        style.maximumLineHeight = bodyLineHeight * lineHeightMultiple
         return (stop - prefixWidth, style)
     }
 
@@ -105,12 +121,15 @@ final class MarkdownTheme {
 
     private lazy var bodyLineHeight = (bodyFont.ascender - bodyFont.descender + bodyFont.leading).rounded(.up)
 
+    /// A code block's lines stay together, as code is written.
     func codeParagraphStyle() -> NSParagraphStyle {
-        paragraphStyle(firstLineIndent: codeInset, headIndent: codeInset, tailIndent: -codeInset)
+        paragraphStyle(firstLineIndent: codeInset, headIndent: codeInset, tailIndent: -codeInset, spacingAfter: 0,
+                       lineHeightMultiple: 1.1)
     }
 
     private func paragraphStyle(firstLineIndent: CGFloat = 0, headIndent: CGFloat = 0, tailIndent: CGFloat = 0,
-                                spacingBefore: CGFloat = 0) -> NSParagraphStyle {
+                                spacingBefore: CGFloat = 0, spacingAfter: CGFloat? = nil,
+                                lineHeightMultiple: CGFloat? = nil) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.tabStops = []
         style.defaultTabInterval = tabInterval
@@ -118,6 +137,8 @@ final class MarkdownTheme {
         style.headIndent = headIndent
         style.tailIndent = tailIndent
         style.paragraphSpacingBefore = spacingBefore
+        style.paragraphSpacing = spacingAfter ?? paragraphSpacing
+        style.lineHeightMultiple = lineHeightMultiple ?? self.lineHeightMultiple
         return style
     }
 

@@ -4,9 +4,9 @@ import PopupNotesCore
 
 /// A lightweight `NSTextView`-backed editor for a note's Markdown.
 ///
-/// SwiftUI's `TextEditor` has a fixed internal inset we can't tighten; wrapping
-/// `NSTextView` lets us set a small `textContainerInset` (so text starts right
-/// under the toolbar) and place the caret at the end with focus when a note is
+/// SwiftUI's `TextEditor` has a fixed internal inset we can't change; wrapping
+/// `NSTextView` lets us set our own `textContainerInset` (so text starts right
+/// under the title) and place the caret at the end with focus when a note is
 /// shown. The detail view is re-created per selection (`.id(note.id)`), so
 /// `makeNSView` runs once per note — caret-at-end therefore applies on each
 /// selection, not just first launch. The text view styles the Markdown as
@@ -27,6 +27,11 @@ struct NoteTextEditor: NSViewRepresentable {
     /// very start.
     var onExitAtTop: () -> Void = {}
 
+    /// Room around the text: a margin either side, and a little above, under
+    /// the title. Its width (plus the text container's 5 pt line padding)
+    /// is where the text starts, which the title lines up with.
+    static let textInset = NSSize(width: 16, height: 8)
+
     /// Asks for keyboard focus each time its `id` changes.
     struct FocusRequest: Equatable {
         var id = 0
@@ -39,10 +44,10 @@ struct NoteTextEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.isRichText = false
         textView.allowsUndo = true
-        textView.font = .preferredFont(forTextStyle: .body)
+        textView.font = textView.styler.theme.bodyFont
         textView.typingAttributes = textView.styler.theme.baseAttributes
         textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 8, height: 6) // tight top/leading padding
+        textView.textContainerInset = Self.textInset
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
