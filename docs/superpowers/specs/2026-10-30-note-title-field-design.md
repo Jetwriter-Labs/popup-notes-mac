@@ -19,8 +19,8 @@ get their first line moved into the title, once, wherever that loses nothing.
 | Storage | `Note.title: String = ""`, stored | The default lets SwiftData open older stores as they are (lightweight migration, verified by a test). |
 | Untitled notes | Sidebar falls back to the text's first line, then "New Note" | Notes stay recognizable without a title, as before. |
 | Title format | Plain text, one line; ⌥↩ and pasted line breaks become spaces | It's a name, shown as typed; no Markdown in it. |
-| Field placement | Above the editor, fixed; level with the sidebar's toolbar buttons | Always visible in a small popup; text starts right below. |
-| Look | Bold, 26 pt (a `#` heading is 21 pt), "Title" placeholder | Must read as *the* title, not one more heading. |
+| Field placement | Above the editor, fixed; level with the sidebar's toolbar buttons. It fills the title-bar strip, so a drag on it (while not editing it) moves the panel; a click edits it | Always visible in a small popup; text starts right below. |
+| Look | Bold, 28 pt (a `#` heading is 23 pt, the text 15 pt — all raised 2026-10-31 from 26/21/13), "Title" placeholder | Must read as *the* title, not one more heading. |
 | Keys | Return, ↓, Tab: title → start of text. ↑ on the text's first line, ⌫ at its very start: back to the title's end | Notion's flow. A held ⌫ never spills into the title. |
 | Focus on open | A blank note starts in its title; any other at the end of its text | Capture stays instant for existing notes. |
 | Existing notes | One-time: first non-blank line → title, if it's a heading or plain line, ≤ 120 characters, with nothing a plain title would lose | Lists, quotes, toggles, code and rules are content, not names; `**`, backticks and link addresses would vanish. |
