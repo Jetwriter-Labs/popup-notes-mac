@@ -84,12 +84,16 @@ struct NoteTextEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? MarkdownTextView else { return }
         context.coordinator.onEdit = onEdit
         context.coordinator.onExitAtTop = onExitAtTop
-        // Only overwrite when the model genuinely diverged (e.g. import), so we
-        // never clobber the user's caret/selection while they type. That
-        // replacement isn't undoable, and the earlier undo entries now point
-        // at ranges that may not exist (⌘Z would throw), so drop them.
-        if textView.string != text {
-            textView.setText(text)
+        // Only when the note changed from outside (an import) — not whenever
+        // the text view differs from it: text still being composed (macOS's
+        // inline prediction, an input method's) shows in the text view but
+        // isn't the note's yet, and replacing it threw the caret to the end
+        // mid-sentence. That replacement isn't undoable, and the earlier
+        // undo entries now point at ranges that may not exist (⌘Z would
+        // throw), so drop them.
+        if text != context.coordinator.syncedText {
+            context.coordinator.syncedText = text
+            textView.setText(text, caret: textView.selectedRange().location)
             context.coordinator.undoManager.removeAllActions()
         }
         if focusRequest != context.coordinator.focusRequest {
@@ -112,6 +116,10 @@ struct NoteTextEditor: NSViewRepresentable {
         var onEdit: () -> Void
         var onExitAtTop: () -> Void
         var focusRequest: FocusRequest
+        /// The note's text as the editor last left it: what it opened with,
+        /// or last wrote to it. The note only changed from outside when it
+        /// differs from this.
+        var syncedText: String
         /// This editor's own undo history. Without it every editor shares the
         /// panel window's undo manager, so ⌘Z could reach into the history of
         /// notes viewed earlier.
@@ -126,6 +134,7 @@ struct NoteTextEditor: NSViewRepresentable {
             self.onEdit = onEdit
             self.onExitAtTop = onExitAtTop
             self.focusRequest = focusRequest
+            syncedText = text.wrappedValue
         }
 
         func attach(_ textView: MarkdownTextView, in scrollView: NSScrollView, outline: NoteOutline?) {
@@ -147,7 +156,9 @@ struct NoteTextEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? MarkdownTextView else { return }
-            text.wrappedValue = textView.string
+            let committed = textView.committedText
+            syncedText = committed
+            text.wrappedValue = committed
             if !textView.isFolding { onEdit() }
         }
 

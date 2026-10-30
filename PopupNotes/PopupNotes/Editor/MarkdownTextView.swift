@@ -45,12 +45,23 @@ final class MarkdownTextView: NSTextView {
     }
 
     /// Replaces the whole text — a note opened, or changed from outside —
-    /// with the caret at the end, or above the folded lines that hide it.
-    /// Its closed toggles stay closed.
-    func setText(_ string: String) {
+    /// with the caret at `caret` (kept in range), or else at the end; above
+    /// the folded lines that would hide it. Its closed toggles stay closed.
+    func setText(_ string: String, caret: Int? = nil) {
         self.string = string
         unrevealedEdit = nil
-        setSelectedRange(NSRange(location: (string as NSString).length, length: 0))
+        let length = (string as NSString).length
+        setSelectedRange(NSRange(location: min(caret ?? length, length), length: 0))
+    }
+
+    /// The text without what is still being composed — the rest of a word
+    /// macOS predicts inline, an input method's marked text. That is in the
+    /// text storage, but it isn't part of the note until it's committed.
+    var committedText: String {
+        let marked = markedRange()
+        guard hasMarkedText(), let storage = textStorage, marked.location != NSNotFound,
+              NSMaxRange(marked) <= storage.length else { return string }
+        return (storage.string as NSString).replacingCharacters(in: marked, with: "")
     }
 
     private var theme: MarkdownTheme { styler.theme }
