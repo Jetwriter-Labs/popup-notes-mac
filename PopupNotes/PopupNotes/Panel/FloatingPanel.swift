@@ -42,6 +42,40 @@ final class FloatingPanel: NSPanel {
         onBecomeKey?()
     }
 
+    /// The top strip is the panel's title bar, and the note's title sits in
+    /// it. Dragging the title moves the panel, as dragging a document's
+    /// title in a toolbar moves its window; a click still edits it. While
+    /// the title is being edited, a drag selects in it as usual.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown, event.clickCount == 1,
+           event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty,
+           event.locationInWindow.y > contentLayoutRect.maxY,
+           let field = contentView?.superview?.hitTest(event.locationInWindow) as? NSTextField,
+           field.isEditable, field.currentEditor() == nil {
+            dragOrClick(from: event)
+            return
+        }
+        super.sendEvent(event)
+    }
+
+    /// Waits for the mouse to move or come up: moving a few points drags
+    /// the panel; coming up first was a click, which goes on to the title.
+    private func dragOrClick(from mouseDown: NSEvent) {
+        while let next = nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            if next.type == .leftMouseUp {
+                postEvent(next, atStart: true) // for the title's own click tracking
+                super.sendEvent(mouseDown)
+                return
+            }
+            let moved = hypot(next.locationInWindow.x - mouseDown.locationInWindow.x,
+                              next.locationInWindow.y - mouseDown.locationInWindow.y)
+            if moved >= 3 {
+                performDrag(with: mouseDown)
+                return
+            }
+        }
+    }
+
     /// ⌘W dismisses, like Esc. Handled here because the panel isn't
     /// `.closable`, so the menu's Close item is disabled for it. Only plain
     /// ⌘W (Caps Lock aside) — ⇧⌘W, ⌥⌘W and the rest go on as usual.
