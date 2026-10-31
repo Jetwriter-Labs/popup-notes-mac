@@ -11,7 +11,8 @@ without breaking flow — no Dock icon, no window juggling, no cloud.
 - **Global hotkey** — `⌃⌘N` by default, customizable in Settings. Works over
   any app, full-screen apps and all Spaces included.
 - **Doesn't steal your context** — the panel floats over the current app
-  without deactivating it, and focus returns the moment you dismiss.
+  without deactivating it, and focus returns the moment you dismiss. Switch
+  to another app (`⌘Tab`) and it gets out of the way.
 - **Menu bar icon optional** — turn it off in Settings (or under System
   Settings ▸ Menu Bar); the hotkey and Spotlight still open your notes.
 - **Multiple notes** — each with a title in its own field above the text
