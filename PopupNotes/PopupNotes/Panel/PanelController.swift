@@ -5,8 +5,9 @@ import PopupNotesCore
 
 /// Owns the notes panel: builds it (lazily, or ahead of time after a login
 /// launch), hosts the SwiftData-backed NotesView, remembers its frame and
-/// follows the user's display, toggles show/hide, watches for click-outside,
-/// and returns focus to the prior app on dismiss.
+/// follows the user's display, toggles show/hide, gets out of the way when
+/// the user clicks outside or switches apps, and returns focus to the prior
+/// app on dismiss.
 @MainActor
 final class PanelController {
     private static let frameName = "PopupNotesPanel"
@@ -43,7 +44,7 @@ final class PanelController {
         ) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             MainActor.assumeIsolated {
-                if let app, !Self.isSelf(app) { self?.lastOtherApp = app }
+                if let app, !Self.isSelf(app) { self?.otherAppDidActivate(app) }
             }
         }
     }
@@ -51,7 +52,8 @@ final class PanelController {
     var isVisible: Bool { panel?.isVisible ?? false }
 
     /// The hotkey. Hides the panel while the user is in it; if it is up but
-    /// unfocused (they ⌘-Tabbed away), brings them back into it instead.
+    /// unfocused (Spotlight or another launcher took the keyboard without
+    /// switching apps), brings them back into it instead.
     func toggle() {
         guard let panel, panel.isVisible else { show(); return }
         if panel.isKeyWindow || awaitingKey || panel.attachedSheet != nil || NSApp.modalWindow != nil {
@@ -164,6 +166,16 @@ final class PanelController {
     /// it. Left alone while the delete confirmation is up on it.
     private func hideForSettings() {
         guard let panel, panel.attachedSheet == nil else { return }
+        hide(restoringFocus: false)
+    }
+
+    /// Another app came to the front: the user ⌘-Tabbed to it, picked it in
+    /// the Dock or a launcher, or swiped to its Space. The panel gets out of
+    /// the way rather than float over where they've gone, as Spotlight does.
+    /// No focus hand-back — that app has it now. Esc's own hand-back to the
+    /// previous app lands here too, once the panel is gone: a no-op.
+    private func otherAppDidActivate(_ app: NSRunningApplication) {
+        lastOtherApp = app
         hide(restoringFocus: false)
     }
 
